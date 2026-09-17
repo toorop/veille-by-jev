@@ -1,20 +1,3 @@
----
-title: veille-by-jev
-aliases:
-  - veille-by-jev
-type: project
-status: V1 in progress — collection operational
-created: 2026-09-17
-updated: 2026-09-17
-tags:
-  - ai
-  - technology-watch
-  - curation
-  - tts
-  - typesafe
-  - python
----
-
 # veille-by-jev
 
 ## Objective
