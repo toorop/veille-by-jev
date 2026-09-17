@@ -34,6 +34,11 @@ min_adjusted_score = 1.0
 # understates this invoice by a measured factor of 1.22.
 price_per_mtok_usd = 0.042
 
+# Candidates scored per night, best adjusted score first. Only items that were enriched
+# are considered, so this is a safety net above the enrichment cap rather than the place
+# where the volume is decided.
+max_items = 200
+
 # One `Score`: a position on an ordered spectrum, described level by level. `score`
 # comes back as a float that can land between two levels, so the levels should read
 # as a progression rather than as boxes.
