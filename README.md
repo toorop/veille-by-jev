@@ -84,7 +84,7 @@ point of the project.
 ## Open questions
 
 - ~~How many items kept per digest?~~ Answered: 8, with an admission floor of 2.0 on the aggregate.
-- Should the digest be written by the same kind of model that judges, or is a separate writer needed?
+- ~~Which model writes the digest?~~ Answered: `anthropic/claude-sonnet-5`, chosen by reading three candidates on the same night. The writer is necessarily a different model from the triage engine, which does not generate text.
 - Deduplication: is URL and domain enough, or is semantic grouping needed?
 - Confidence threshold below which an item is dropped without discussion?
 - Should HN comments be kept in the state, and where in the prompt?
@@ -105,7 +105,7 @@ Facts verified on **2026-09-17**:
 
 ## Status
 
-**Phase:** V1 in progress — `collect`, `enrich` and `triage` are operational, the grid is complete, `write` remains
+**Phase:** V1 complete — the four stages run end to end, and a first digest exists
 **Last updated:** 2026-09-17
 
 The three implemented stages are exercised on a real Hacker News day (2026-09-16):
@@ -123,12 +123,14 @@ The three implemented stages are exercised on a real Hacker News day (2026-09-16
 | Triage of 200 items | 88 s, USD 0.0167, so about USD 0.50 per month |
 | Admission | floor 2.0 keeps 14 candidates on that night; the digest will take 8 |
 | Grid | four questions, weights 0.5 / 0.3 / 0.2, a category recorded but not ranked |
+| Digest | 8 items, French, USD 0.12 for the night, so about USD 0.50 of triage plus USD 3.62 of writing per month |
 
-`write` is not implemented. The pipeline has now been run end to end on a full night: 200
-candidates collected, enriched and triaged on 2026-09-16. Only the digest itself has not been
-produced yet. The project is developed one stage at a time, each stage verified against real
-data before the next one starts; 134 tests cover the three stages without touching the network
-or the provider.
+The four stages have now been run end to end on the night of 2026-09-16: 200 candidates
+collected, enriched and triaged, then a French digest written from the eight the grid
+admitted. The acceptance criterion is a human one and remains open: the digest has to be
+read all the way through. The project is developed one stage at a time, each verified against
+real data before the next; 156 tests cover the pipeline without touching the network or the
+providers.
 
 Three honest caveats, all measured rather than assumed. The engine is **not deterministic**: two
 runs over the same five items moved scores by up to 0.05 and confidences by about 0.01, so

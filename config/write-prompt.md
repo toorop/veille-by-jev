@@ -21,6 +21,11 @@ being complete, and more than being elegant.
 - A sentence that has to be read twice is a defect to fix, not a nuance to preserve. Between
   a precise word the reader will not know and a slightly less precise one they will, choose
   the one they will know.
+- Simplifying must not distort. Keep the term the article uses, and do not replace one
+  vendor's or one technology's term with a neighbouring one: AMD's "matrix cores" are not
+  Nvidia's "tensor cores", and calling them that teaches the reader something false. Do not
+  round a figure into a different claim either. When a simplification would change the
+  meaning, explain the term instead of substituting it.
 
 ## What you receive
 

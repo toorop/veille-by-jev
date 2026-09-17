@@ -406,6 +406,24 @@ writer, against USD 0.50 for the triage alone.
 - Anthropic's tokeniser counts the same state as 24,109 tokens where the others count about
   16,000, so its cost per night is higher than the price list alone suggests.
 
+### The writer chosen, and what that cost
+
+`anthropic/claude-sonnet-5` writes the digest. It is the only one of the three that explains
+reasoning instead of listing figures, which is what the readability requirement asks for, and
+the difference in cost is a few dollars a month on a project that runs once a night.
+
+The first answer from that model called AMD's matrix cores "tensor cores", which is Nvidia's
+term for something else: a simplification that taught the reader something false. The system
+prompt now carries an explicit rule — keep the term the article uses, do not swap one vendor's
+term for a neighbouring one, and explain rather than substitute when a simplification would
+change the meaning. On the same item the next run wrote "les multiplicateurs de matrices
+intégrés aux GPU", then contrasted AMD's matrix cores with Nvidia's tensor cores correctly.
+
+The hardened prompt makes the model write more: 7,230 output tokens for eight items, against
+3,655 before. Measured on the contract digest: 24,242 input and 7,230 output tokens, 67 s,
+USD 0.1208 for the night, so about USD 3.62 per month. The pipeline as a whole costs about
+USD 4.12 per month, of which USD 0.50 is the triage.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -463,3 +481,5 @@ stages not yet written.
 | 2026-09-17 | Writer model chosen through OpenRouter, on a measured comparison | The cost range from cheap open models to frontier ones is under three dollars a month, so price does not settle it; three candidates were run on the same stored batch and read |
 | 2026-09-17 | The model writes prose only, the structure is generated | A model that can quote a figure can misquote it; links and scores come from the data |
 | 2026-09-17 | Output ceiling raised from 4,000 to 8,000 tokens | A truncated answer cost a full call and produced eight missing summaries; the reserve made it visible instead of silent |
+| 2026-09-17 | `anthropic/claude-sonnet-5` writes the digest | The only candidate that explains reasoning instead of listing figures; about USD 3.62 a month for the writer alone |
+| 2026-09-17 | The prompt forbids substituting a neighbouring term | It had called AMD's matrix cores "tensor cores", Nvidia's term: a simplification that teaches something false |

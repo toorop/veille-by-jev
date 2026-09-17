@@ -7,7 +7,7 @@
 #   deepseek/deepseek-v4-flash     USD 0.05 per month
 #   mistralai/mistral-medium-3     USD 0.35 per month
 #   anthropic/claude-sonnet-5      USD 1.77 per month
-model = "mistralai/mistral-medium-3"
+model = "anthropic/claude-sonnet-5"
 
 # OpenAI-compatible base URL. OpenRouter by default; another provider or a local
 # server would go here, since the writer only speaks the chat-completions protocol.
