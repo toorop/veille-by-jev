@@ -32,7 +32,7 @@ app = typer.Typer(
 
 SOURCE_MODULES = {"hn": hn}
 
-FIELD_WIDTH = 9
+FIELD_WIDTH = 10
 
 
 def _fail(message: str, code: int = 2) -> NoReturn:
@@ -92,6 +92,10 @@ def collect(
     failure is recorded in the output file and does not bring the command down.
     Running it again on a date already collected does nothing unless `--force` is
     passed.
+
+    Output is deliberately uncapped: every candidate above the score floor is
+    written, because collection costs a single request. The cap that bounds the
+    priced stages is applied by the stage that pays for it.
     """
     day = _parse_day(raw_date)
     try:
@@ -108,7 +112,7 @@ def collect(
     if out_path.exists() and not force:
         existing = read_json(out_path)
         stats = existing.get("stats", {})
-        already_selected = stats.get("selected", "?")
+        already_selected = stats.get("candidates", "?")
         collected_at = existing.get("generated_at", "?")
         typer.echo(f"{out_path.relative_to(ROOT)} already exists — nothing to do.")
         typer.echo(_field("items", f"{already_selected} (collected at {collected_at})"))
@@ -140,7 +144,8 @@ def collect(
         outcomes.append(module.collect(window, source_cfg, settings.collect, name))
     duration_s = round(time.monotonic() - started, 2)
 
-    # Merge and deduplicate across sources, then truncate once to target_items.
+    # Merge and deduplicate across sources. Deliberately uncapped: collection is
+    # free, so items.json is a full snapshot of the day's candidates.
     best_by_url: dict[str, Item] = {}
     for outcome in outcomes:
         for item in outcome.items:
@@ -152,7 +157,6 @@ def collect(
         key=lambda item: (item.points, item.num_comments, item.published_at),
         reverse=True,
     )
-    selected = merged[: settings.collect.target_items]
     fetched = sum(outcome.report.fetched for outcome in outcomes)
     after_filter = sum(outcome.report.kept for outcome in outcomes)
 
@@ -179,8 +183,8 @@ def collect(
                 fg=typer.colors.YELLOW,
             )
 
-    if not selected:
-        typer.echo(_field("selection", f"{after_filter} after filter → 0 kept"))
+    if not merged:
+        typer.echo(_field("candidates", f"{after_filter} after filter → 0 kept"))
         typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))
         _fail(
             f"Nothing to write for {day.isoformat()}: a source failed, or the window has no "
@@ -188,39 +192,33 @@ def collect(
             code=1,
         )
 
-    published = [item.published_at for item in selected]
+    published = [item.published_at for item in merged]
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "date": day.isoformat(),
         "timezone": window.timezone,
         "generated_at": _iso(datetime.now(UTC)),
         "window": {"start": _iso(window.start), "end": _iso(window.end), "hours": window.hours},
-        "settings": {
-            "target_items": settings.collect.target_items,
-            "min_points": settings.collect.min_points,
-        },
+        "settings": {"min_points": settings.collect.min_points},
         "sources": [outcome.report.model_dump(mode="json") for outcome in outcomes],
         "stats": {
             "fetched": fetched,
             "after_score_filter": after_filter,
-            "after_cross_source_dedup": len(merged),
-            "selected": len(selected),
-            "truncated": max(0, len(merged) - len(selected)),
+            "candidates": len(merged),
             "published_at_min": _iso(min(published)),
             "published_at_max": _iso(max(published)),
             "duration_s": duration_s,
             "model_calls": 0,
             "cost_usd": 0.0,
         },
-        "items": [item.model_dump(mode="json") for item in selected],
+        "items": [item.model_dump(mode="json") for item in merged],
     }
     write_json(out_path, payload)
 
     typer.echo(
         _field(
-            "selection",
-            f"{after_filter} after filter → {len(merged)} after deduplication "
-            f"→ {len(selected)} kept (target {settings.collect.target_items})",
+            "candidates",
+            f"{after_filter} after filter → {len(merged)} after deduplication, all written",
         )
     )
     typer.echo(_field("written", f"{out_path.relative_to(ROOT)} ({out_path.stat().st_size} bytes)"))

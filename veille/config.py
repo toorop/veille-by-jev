@@ -23,10 +23,15 @@ MAX_HITS_PER_QUERY = 1000
 
 
 class CollectConfig(BaseModel):
-    """Parameters shared by every source."""
+    """Parameters shared by every source.
+
+    There is no item cap here on purpose: collection costs nothing beyond a single
+    HTTP request, so it keeps every candidate above `min_points`. The cap that
+    bounds the priced stages belongs to the stage that pays, and is set where it is
+    consumed (`enrich`, then `triage`).
+    """
 
     timezone: str = Field(default="Europe/Paris", description="Zone of the civil days.")
-    target_items: int = Field(default=200, ge=1, description="Items kept per night.")
     min_points: int = Field(default=1, ge=0, description="Minimum source score to be kept.")
 
 

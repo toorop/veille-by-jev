@@ -6,9 +6,10 @@
 # from 00:00 to 24:00 local time, converted to UTC for the API.
 timezone = "Europe/Paris"
 
-# Items kept per night: this is the input of the triage stage, so it is the cost
-# driver. Collection keeps the best scores of the window, not everything published.
-target_items = 200
+# Items are NOT capped here. Collection is free (a single HTTP request) and keeps
+# every candidate above min_points, so that the scoring grid can be re-tuned later
+# without collecting again. The cap that bounds the priced stages is set where it is
+# consumed: enrich first, then triage.
 
 # Minimum Hacker News score for an item to be kept. 1 drops stories with 0 points.
 min_points = 1
