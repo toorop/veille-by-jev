@@ -92,7 +92,9 @@ vbj write --date 2026-09-16
 **Replaying is safe and free.** A stage whose output already exists does nothing and spends
 nothing; `--force` makes it run again. `enrich` and `triage` also take `--limit N` to try a
 handful of items, and `write` takes `--model` and `--output` to compare two writers on the same
-night without overwriting the digest.
+night without overwriting the digest. `write --dump-prompt <path>` writes the exact state it would
+send and stops, without reading a key or calling anything — see
+[Testing a writer outside the pipeline](docs/writer-testing.md).
 
 ### What the digest looks like
 

@@ -43,7 +43,7 @@ from veille.store import (
     write_json,
 )
 from veille.triage import triage_day
-from veille.write import write_day
+from veille.write import prepare_prompt, write_day
 
 app = typer.Typer(
     add_completion=False,
@@ -458,6 +458,13 @@ def write(
         bool,
         typer.Option("--force", help="Write again even when the digest already exists."),
     ] = False,
+    dump_prompt: Annotated[
+        Path | None,
+        typer.Option(
+            "--dump-prompt",
+            help="Write the exact user prompt to this path and stop, without calling a model.",
+        ),
+    ] = None,
 ) -> None:
     """Stage 4 — write the French Markdown digest into `digest/<date>.md`.
 
@@ -483,6 +490,28 @@ def write(
         grid = load_questions_config()
     except FileNotFoundError as exc:
         _fail(str(exc))
+
+    if dump_prompt is not None:
+        # The state is what a model comparison needs, and building it costs nothing: no key is
+        # read, no request is made, nothing is billed.
+        try:
+            prepared = prepare_prompt(day, cfg, grid)
+        except FileNotFoundError as exc:
+            _fail(str(exc))
+        dump_prompt.parent.mkdir(parents=True, exist_ok=True)
+        dump_prompt.write_text(prepared.user_prompt, encoding="utf-8")
+        typer.echo(f"vbj write --date {day.isoformat()} --dump-prompt")
+        typer.echo(
+            _field(
+                "prompt",
+                f"{len(prepared.user_prompt)} characters, {len(prepared.kept)} items, "
+                f"floor {prepared.floor}, digest size {cfg.digest_size}",
+            )
+        )
+        typer.echo(_field("written", f"{_display_path(dump_prompt)}"))
+        typer.echo(_field("system", f"{_display_path(cfg.prompt_file())}"))
+        typer.echo(_field("cost", "USD 0.00 — no model call"))
+        return
 
     destination = output or digest_path(day)
     if destination.exists() and not force:

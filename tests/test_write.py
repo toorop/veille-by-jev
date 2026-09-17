@@ -25,6 +25,7 @@ from veille.models import AnswerRecord, EnrichedItem, ItemScore
 from veille.write import (
     build_state,
     parse_reply,
+    prepare_prompt,
     render_digest,
     select_kept,
     write_day,
@@ -451,3 +452,38 @@ def test_a_dropped_title_is_a_link_and_cannot_break_the_table() -> None:
     assert len(re.findall(r"(?<!\\)\|", row)) == 4
     assert "Un titre \\| avec \\[des\\] crochets" in row
     assert "](<https://example.com/a_(b)>)" in row
+
+
+def test_the_prompt_sent_is_exactly_the_one_prepared(
+    scores_file: Path, write_cfg: WriteConfig, grid: QuestionsConfig, tmp_path: Path
+) -> None:
+    """Le dump doit être l'état envoyé, pas une reconstruction approximative."""
+    write_scores(scores_file, [make_score("1", 2.5), make_score("2", 1.0)])
+    prepared = prepare_prompt(DAY, write_cfg, grid)
+    chat = FakeChat()
+
+    write_day(DAY, write_cfg, grid, output=tmp_path / "d.md", chat=chat)
+
+    assert chat.calls == [prepared.user_prompt]
+    assert len(prepared.kept) == 1
+    assert len(prepared.dropped) == 1
+    assert prepared.floor == 2.0
+    assert prepared.considered == 2
+
+
+def test_the_prepared_prompt_holds_the_day_and_its_items(
+    scores_file: Path, write_cfg: WriteConfig, grid: QuestionsConfig
+) -> None:
+    write_scores(scores_file, [make_score("1", 2.5)])
+
+    state = json.loads(prepare_prompt(DAY, write_cfg, grid).user_prompt)
+
+    assert state["date"] == "2026-09-16"
+    assert [item["id"] for item in state["items"]] == ["hn:1"]
+
+
+def test_preparing_a_prompt_without_scores_is_an_explicit_error(
+    scores_file: Path, write_cfg: WriteConfig, grid: QuestionsConfig
+) -> None:
+    with pytest.raises(FileNotFoundError, match="triage"):
+        prepare_prompt(DAY, write_cfg, grid)

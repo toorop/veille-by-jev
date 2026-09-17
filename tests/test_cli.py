@@ -80,3 +80,22 @@ def test_the_callback_loads_the_local_env_file(monkeypatch: pytest.MonkeyPatch) 
     runner.invoke(app, ["collect", "--date", "2026-09-16"])
 
     assert calls == [1]
+
+
+def test_dumping_the_prompt_writes_it_without_calling_a_model(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Le dump sert justement à tester un modèle ailleurs : il ne doit rien appeler."""
+    scores = tmp_path / "scores.json"
+    scores.write_text(
+        json.dumps({"schema_version": 1, "settings": {}, "scores": []}), encoding="utf-8"
+    )
+    monkeypatch.setattr("veille.write.scores_path", lambda day: scores)
+    target = tmp_path / "prompt.json"
+
+    result = runner.invoke(app, ["write", "--date", "2026-09-16", "--dump-prompt", str(target)])
+
+    assert result.exit_code == 0
+    assert target.exists()
+    assert json.loads(target.read_text(encoding="utf-8"))["date"] == "2026-09-16"
+    assert "no model call" in result.stdout

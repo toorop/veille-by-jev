@@ -17,6 +17,7 @@ import json
 import os
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -276,6 +277,66 @@ def render_digest(
     return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class PreparedPrompt:
+    """Everything a writing run needs, before any model is called.
+
+    Attributes:
+        user_prompt: The exact state that would be sent, as JSON.
+        kept: Items the digest keeps, best first.
+        dropped: Items set aside, best first.
+        floor: Admission floor that was applied.
+        considered: Number of items triaged that night.
+    """
+
+    user_prompt: str
+    kept: list[ItemScore]
+    dropped: list[ItemScore]
+    floor: float
+    considered: int
+
+
+def prepare_prompt(day: date, cfg: WriteConfig, grid: QuestionsConfig) -> PreparedPrompt:
+    """Read the night's scores, choose what the digest keeps, and build the user prompt.
+
+    Separated from `write_day` so the exact state can be dumped and inspected — or fed to a
+    model comparison outside this pipeline — without calling anything.
+
+    Args:
+        day: Day to write up.
+        cfg: Writing settings, for the digest size.
+        grid: The grid, for the admission floor.
+
+    Returns:
+        The prompt and the selection behind it.
+
+    Raises:
+        FileNotFoundError: If `scores.json` is missing.
+    """
+    source = scores_path(day)
+    if not source.exists():
+        raise FileNotFoundError(f"{source} not found: run `vbj triage --date {day}` first.")
+
+    scores = [ItemScore.model_validate(raw) for raw in read_json(source)["scores"]]
+    floor = grid.triage.min_adjusted_score
+    kept, dropped = select_kept(scores, floor, cfg.digest_size)
+
+    enriched_by_url: dict[str, EnrichedItem | None] = {}
+    for score in kept:
+        path = enriched_path(day, score.url)
+        enriched_by_url[score.url] = (
+            EnrichedItem.model_validate(read_json(path)) if path.exists() else None
+        )
+
+    return PreparedPrompt(
+        user_prompt=build_state(day, kept, enriched_by_url),
+        kept=kept,
+        dropped=dropped,
+        floor=floor,
+        considered=len(scores),
+    )
+
+
 def write_day(
     day: date,
     cfg: WriteConfig,
@@ -305,27 +366,15 @@ def write_day(
         ChatError: If the provider refuses the call.
         FileNotFoundError: If `scores.json` is missing.
     """
-    source = scores_path(day)
-    if not source.exists():
-        raise FileNotFoundError(f"{source} not found: run `vbj triage --date {day}` first.")
-
-    payload = read_json(source)
-    scores = [ItemScore.model_validate(raw) for raw in payload["scores"]]
-    floor = grid.triage.min_adjusted_score
-    kept, dropped = select_kept(scores, floor, cfg.digest_size)
-
-    enriched_by_url: dict[str, EnrichedItem | None] = {}
-    for score in kept:
-        path = enriched_path(day, score.url)
-        enriched_by_url[score.url] = (
-            EnrichedItem.model_validate(read_json(path)) if path.exists() else None
-        )
+    prepared = prepare_prompt(day, cfg, grid)
+    kept, dropped = prepared.kept, prepared.dropped
+    floor, considered = prepared.floor, prepared.considered
 
     destination = output or digest_path(day)
     if destination.exists() and not force:
         return WriteOutcome(
             report=WriteReport(
-                considered=len(scores),
+                considered=considered,
                 kept=len(kept),
                 dropped=len(dropped),
                 floor=floor,
@@ -346,9 +395,7 @@ def write_day(
         else OpenRouterChat(effective, api_key=os.environ.get(WRITE_LLM_API_KEY_ENV, ""))
     )
     started = time.monotonic()
-    reply = active.complete(
-        prompt_file.read_text(encoding="utf-8"), build_state(day, kept, enriched_by_url)
-    )
+    reply = active.complete(prompt_file.read_text(encoding="utf-8"), prepared.user_prompt)
     prose, error = parse_reply(reply.content)
 
     markdown = render_digest(
@@ -359,7 +406,7 @@ def write_day(
         reply,
         labels=cfg.labels,
         floor=floor,
-        considered=len(scores),
+        considered=considered,
     )
     if error is not None:
         # The raw answer is kept next to the day's data: a truncated reply is the one case
@@ -377,7 +424,7 @@ def write_day(
 
     return WriteOutcome(
         report=WriteReport(
-            considered=len(scores),
+            considered=considered,
             kept=len(kept),
             dropped=len(dropped),
             floor=floor,
