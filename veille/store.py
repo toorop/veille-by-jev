@@ -1,8 +1,8 @@
-"""Arborescence des données, empreintes d'URL et écriture de fichiers.
+"""Data layout, URL fingerprints and file writing.
 
-Les étapes du pipeline communiquent par fichiers : ce module centralise où ils
-vivent et comment ils sont écrits, pour qu'aucune étape n'invente son propre
-chemin. Aucune base de données en V1.
+Pipeline stages talk to each other through files: this module centralises where
+those files live and how they are written, so that no stage invents its own paths.
+V1 has no database.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import date as Date
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -22,56 +22,69 @@ DIGEST_DIR = ROOT / "digest"
 SEEN_PATH = ROOT / "seen.jsonl"
 
 
-def data_dir(day: Date) -> Path:
+def data_dir(day: date) -> Path:
+    """Return the per-day data directory, for example `data/2026-09-16/`."""
     return DATA_DIR / day.isoformat()
 
 
-def enriched_dir(day: Date) -> Path:
+def enriched_dir(day: date) -> Path:
+    """Return the directory holding the enriched items of `day`."""
     return data_dir(day) / "enriched"
 
 
-def items_path(day: Date) -> Path:
+def items_path(day: date) -> Path:
+    """Return the path of the collection output for `day`."""
     return data_dir(day) / "items.json"
 
 
-def scores_path(day: Date) -> Path:
+def scores_path(day: date) -> Path:
+    """Return the path of the triage output for `day`."""
     return data_dir(day) / "scores.json"
 
 
-def digest_path(day: Date) -> Path:
+def digest_path(day: date) -> Path:
+    """Return the path of the Markdown digest for `day`."""
     return DIGEST_DIR / f"{day.isoformat()}.md"
 
 
 def url_fingerprint(url: str) -> str:
-    """Empreinte stable d'une URL, utilisée comme nom de fichier de cache.
+    """Return a stable fingerprint of a URL, used as a cache file name.
 
-    16 caractères hexadécimaux (64 bits) : suffisant pour un cache local, et
-    lisible dans une arborescence qu'on inspecte à la main.
+    Sixteen hexadecimal characters (64 bits): enough for a local cache, and
+    readable in a tree that gets inspected by hand.
     """
     return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()[:16]
 
 
 def write_json(path: Path, payload: Any) -> None:
-    """Écrit un JSON de façon atomique : fichier temporaire puis renommage.
+    """Write JSON atomically: temporary file first, then rename.
 
-    Un run interrompu ne laisse donc jamais un `items.json` tronqué derrière lui.
+    An interrupted run therefore never leaves a truncated `items.json` behind.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n"
-    handle = tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
-    )
+    tmp_path: Path | None = None
     try:
-        with handle:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(handle.name, path)
+        os.replace(tmp_path, path)
     except BaseException:
-        Path(handle.name).unlink(missing_ok=True)
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
         raise
 
 
 def read_json(path: Path) -> Any:
+    """Read and decode a UTF-8 JSON file."""
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)

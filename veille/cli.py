@@ -1,15 +1,18 @@
-"""Interface en ligne de commande du pipeline.
+"""Command-line interface of the pipeline.
 
-Une commande par étape, des fichiers comme interface : `collect`, puis `enrich`,
-`triage` et `write` (étapes suivantes). Chaque commande est rejouable seule pour
-une date donnée, et rejouer une étape déjà faite ne redépense rien sans `--force`.
+One command per stage, with files as the interface: `collect`, then `enrich`,
+`triage` and `write` (later stages). Each command can be replayed on its own for a
+given date, and replaying a finished stage costs nothing unless `--force` is passed.
+
+Language convention: comments and docstrings are English, like the rest of the
+code. Everything the operator reads — help, progress, errors — is French, like the
+digest itself.
 """
 
 from __future__ import annotations
 
 import time
-from datetime import date as Date
-from datetime import datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Annotated, NoReturn
 
 import typer
@@ -31,22 +34,26 @@ SOURCE_MODULES = {"hn": hn}
 
 
 def _fail(message: str, code: int = 2) -> NoReturn:
+    """Print an error on stderr and exit with `code`."""
     typer.secho(message, err=True, fg=typer.colors.RED)
     raise typer.Exit(code=code)
 
 
-def _parse_day(raw: str) -> Date:
+def _parse_day(raw: str) -> date:
+    """Parse an `AAAA-MM-JJ` option value, exiting with a clear message otherwise."""
     try:
-        return Date.fromisoformat(raw)
+        return date.fromisoformat(raw)
     except ValueError:
         _fail(f"Date invalide : {raw!r}. Format attendu : AAAA-MM-JJ (exemple : 2026-09-16).")
 
 
 def _iso(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    """Format an instant as an explicit UTC ISO 8601 string ending in `Z`."""
+    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _version_callback(value: bool) -> None:
+    """Print the version and exit, as an eager `--version` option."""
     if value:
         typer.echo(f"veille-by-jev {__version__}")
         raise typer.Exit()
@@ -56,42 +63,56 @@ def _version_callback(value: bool) -> None:
 def main(
     version: Annotated[
         bool,
-        typer.Option("--version", callback=_version_callback, is_eager=True, help="Affiche la version."),
+        typer.Option(
+            "--version", callback=_version_callback, is_eager=True, help="Affiche la version."
+        ),
     ] = False,
 ) -> None:
-    """veille-by-jev — collecte, triage et rédaction d'un digest quotidien."""
+    """Run the veille-by-jev pipeline, one subcommand per stage."""
 
 
-@app.command()
+@app.command(
+    help=(
+        "Étape 1 — collecte les items des sources activées dans data/<date>/items.json.\n\n"
+        "Aucun appel à un modèle : cette étape est volontairement bête et vérifiable. "
+        "Un échec de source est journalisé dans le fichier et ne fait pas tomber la commande."
+    )
+)
 def collect(
-    date: Annotated[str, typer.Option("--date", help="Journée civile à collecter, format AAAA-MM-JJ.")],
+    raw_date: Annotated[
+        str, typer.Option("--date", help="Journée civile à collecter, format AAAA-MM-JJ.")
+    ],
     force: Annotated[
         bool,
         typer.Option("--force", help="Recollecte même si data/<date>/items.json existe déjà."),
     ] = False,
 ) -> None:
-    """Étape 1 — collecte les items des sources activées dans data/<date>/items.json.
+    """Collect the items of every enabled source into `data/<date>/items.json`.
 
-    Aucun appel à un modèle : cette étape est volontairement bête et vérifiable.
-    Un échec de source est journalisé dans le fichier et ne fait pas tomber la commande.
+    Stage 1. No model call at all: this stage is deliberately dumb and verifiable.
+    A source failure is recorded in the output file and does not bring the command
+    down. Running it again on a date already collected is a no-op unless `--force`
+    is passed.
     """
-    day = _parse_day(date)
+    day = _parse_day(raw_date)
     try:
         settings = load_sources_config()
     except FileNotFoundError as exc:
         _fail(str(exc))
-    except ValidationError as exc:  # pragma: no cover - dépend du fichier édité
+    except ValidationError as exc:  # pragma: no cover - depends on the file being edited
         _fail(f"config/sources.toml invalide :\n{exc}")
 
     window = day_window(day, settings.collect.timezone)
     out_path = items_path(day)
 
-    # Invariant d'idempotence : sans --force, on ne refait pas un travail déjà fait.
+    # Idempotence invariant: without --force, never redo work already done.
     if out_path.exists() and not force:
         existing = read_json(out_path)
         stats = existing.get("stats", {})
+        already_selected = stats.get("selected", "?")
+        collected_at = existing.get("generated_at", "?")
         typer.echo(f"{out_path.relative_to(ROOT)} existe déjà — rien à faire.")
-        typer.echo(f"  items      : {stats.get('selected', '?')} (collecte du {existing.get('generated_at', '?')})")
+        typer.echo(f"  items      : {already_selected} (collecte du {collected_at})")
         typer.echo(f"  source     : {out_path}")
         typer.echo("  pour refaire la collecte : ajouter --force")
         typer.echo("  coût       : 0,00 USD (aucun appel de modèle)")
@@ -120,12 +141,12 @@ def collect(
         outcomes.append(module.collect(window, source_cfg, settings.collect, name))
     duration_s = round(time.monotonic() - started, 2)
 
-    # Fusion et déduplication inter-sources, puis troncature unique à target_items.
+    # Merge and deduplicate across sources, then truncate once to target_items.
     best_by_url: dict[str, Item] = {}
     for outcome in outcomes:
         for item in outcome.items:
             current = best_by_url.get(item.url)
-            if current is None or (item.points, item.num_comments) > (current.points, current.num_comments):
+            if current is None or item.outranks(current):
                 best_by_url[item.url] = item
     merged = sorted(
         best_by_url.values(),
@@ -136,10 +157,11 @@ def collect(
     fetched = sum(outcome.report.fetched for outcome in outcomes)
     after_filter = sum(outcome.report.kept for outcome in outcomes)
 
-    # --- compte rendu : le rapport par source passe avant toute décision, pour
-    # qu'un run vide se lise comme « source en panne » ou « journée pauvre » ---
+    # --- Report: the per-source lines come before any decision, so that an empty
+    # run reads either as "source down" or as "quiet day" ---
     typer.echo(f"vbj collect --date {day.isoformat()}")
-    typer.echo(f"  fuseau    : {window.timezone} — fenêtre UTC {_iso(window.start)} → {_iso(window.end)}")
+    utc_range = f"{_iso(window.start)} → {_iso(window.end)}"
+    typer.echo(f"  fuseau    : {window.timezone} — fenêtre UTC {utc_range}")
     for outcome in outcomes:
         report = outcome.report
         if report.status == "ok":
@@ -157,8 +179,9 @@ def collect(
         typer.echo(f"  sélection : {after_filter} après filtre → 0 retenu")
         typer.echo("  coût      : 0,00 USD — aucun appel de modèle à cette étape")
         _fail(
-            f"Rien à écrire pour le {day.isoformat()} : source en échec ou fenêtre sans item au-dessus "
-            f"de min_points={settings.collect.min_points} (voir le rapport ci-dessus).",
+            f"Rien à écrire pour le {day.isoformat()} : source en échec ou fenêtre "
+            f"sans item au-dessus de min_points={settings.collect.min_points} "
+            "(voir le rapport ci-dessus).",
             code=1,
         )
 
@@ -167,7 +190,7 @@ def collect(
         "schema_version": 1,
         "date": day.isoformat(),
         "timezone": window.timezone,
-        "generated_at": _iso(datetime.now(timezone.utc)),
+        "generated_at": _iso(datetime.now(UTC)),
         "window": {"start": _iso(window.start), "end": _iso(window.end), "hours": window.hours},
         "settings": {
             "target_items": settings.collect.target_items,
