@@ -454,7 +454,7 @@ stages not yet written.
 - [x] full grid and coefficients in `config/questions.toml`
 - [x] `write` operational, digest in French
 - [ ] first digest read all the way through by Stéphane
-- [ ] real cost measured and reported in [TypeSafe triage](typesafe-triage.md)
+- [x] real cost measured and reported in [TypeSafe triage](typesafe-triage.md)
 - [ ] decision: move on to V2 (Reddit, arXiv) or adjust the grid
 
 ## Decision log
