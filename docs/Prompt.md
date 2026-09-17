@@ -1,4 +1,4 @@
-Tu vas développer la V1 du projet « Veille Audio » : un CLI Python qui produit chaque nuit un digest Markdown en français à partir des articles de Hacker News de la journée. Réponds-moi en français.
+Tu vas développer la V1 du projet « veille-by-jev » : un CLI Python qui produit chaque nuit un digest Markdown en français à partir des articles de Hacker News de la journée. Réponds-moi en français.
 
 Documentation de cadrage, à lire dans cet ordre avant d'écrire une ligne de code :
 1. README.md
@@ -17,7 +17,7 @@ Règles de travail, impératives :
 - Aucune clé d'API dans le dépôt : variables d'environnement, plus un .env.example sans valeurs.
 - Avant d'ajouter une dépendance qui n'est pas listée dans le handoff, demande-moi.
 
-Commence par l'étape 1 uniquement : la commande « veille collect », jusqu'à obtenir un data/<date>/items.json correct sur une journée réelle de Hacker News. Aucun appel à un modèle à cette étape ; je n'aurai pas de clé API à te fournir avant l'étape 3.
+Commence par l'étape 1 uniquement : la commande « vbj collect », jusqu'à obtenir un data/<date>/items.json correct sur une journée réelle de Hacker News. Aucun appel à un modèle à cette étape ; je n'aurai pas de clé API à te fournir avant l'étape 3.
 
 Quand l'étape 1 est terminée, montre-moi :
 - l'arborescence créée ;

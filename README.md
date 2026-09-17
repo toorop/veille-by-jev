@@ -1,7 +1,7 @@
 ---
-title: Veille Audio
+title: veille-by-jev
 aliases:
-  - Veille Audio
+  - veille-by-jev
 type: projet
 status: cadrage — non implémenté
 created: 2026-09-17
@@ -15,7 +15,7 @@ tags:
   - python
 ---
 
-# Veille Audio
+# veille-by-jev
 
 ## Objectif
 

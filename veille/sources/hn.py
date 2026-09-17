@@ -99,7 +99,7 @@ def collect(
         with httpx.Client(
             timeout=cfg.timeout_s,
             follow_redirects=True,
-            headers={"User-Agent": "veille-audio/0.1 (collecte personnelle Hacker News)"},
+            headers={"User-Agent": "veille-by-jev/0.1 (collecte personnelle Hacker News)"},
         ) as client:
             for page in range(cfg.max_pages):
                 payload = _fetch_page(client, cfg, window, page)

@@ -14,7 +14,7 @@ tags:
 
 # Journal de mise en œuvre
 
-Retour à l'index : [Veille Audio](../README.md).
+Retour à l'index : [veille-by-jev](../README.md).
 
 ## 2026-09-17 — cadrage
 

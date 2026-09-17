@@ -18,7 +18,7 @@ tags:
 
 ## But de ce document
 
-Brief autonome et exécutable pour implémenter la V1 de [Veille Audio](../README.md). Tout ce qui est nécessaire est explicité ici : aucun élément ne dépend d'une conversation antérieure.
+Brief autonome et exécutable pour implémenter la V1 de [veille-by-jev](../README.md). Tout ce qui est nécessaire est explicité ici : aucun élément ne dépend d'une conversation antérieure.
 
 Contexte de développement : Stéphane développe en rédigeant d'abord un document de cadrage, puis en avançant par petites étapes testées et validées. Les étapes doivent être livrables et vérifiables une par une, pas par un gros lot final.
 
@@ -38,7 +38,7 @@ Un CLI Python, exécutable sur la machine de développement, qui produit chaque 
 ## Arborescence attendue
 
 ```text
-Veille Audio/                 # racine du dépôt (= dossier de travail)
+veille-by-jev/                 # racine du dépôt (= dossier de travail)
   README.md                   # index du projet
   docs/                       # documentation de cadrage (ce dossier-ci)
   pyproject.toml
@@ -64,10 +64,10 @@ Veille Audio/                 # racine du dépôt (= dossier de travail)
 
 | Commande | Entrée | Sortie | Contrainte |
 | --- | --- | --- | --- |
-| `veille collect --date J` | `config/sources.toml` | `data/J/items.json` | aucun appel de modèle |
-| `veille enrich --date J` | `items.json` | `data/J/enriched/<hash>.json` | cache par empreinte d'URL |
-| `veille triage --date J` | `items.json` + `enriched/` + `config/questions.toml` | `data/J/scores.json` | appelle TypeSafe |
-| `veille write --date J` | les N premiers de `scores.json` | `digest/J.md` | appelle un LLM génératif |
+| `vbj collect --date J` | `config/sources.toml` | `data/J/items.json` | aucun appel de modèle |
+| `vbj enrich --date J` | `items.json` | `data/J/enriched/<hash>.json` | cache par empreinte d'URL |
+| `vbj triage --date J` | `items.json` + `enriched/` + `config/questions.toml` | `data/J/scores.json` | appelle TypeSafe |
+| `vbj write --date J` | les N premiers de `scores.json` | `digest/J.md` | appelle un LLM génératif |
 
 Détail des étapes et des invariants : [Workflow du pipeline](<Workflow du pipeline.md>). Détail de l'état, des questions et des coûts : [Triage TypeSafe](<Triage TypeSafe.md>).
 

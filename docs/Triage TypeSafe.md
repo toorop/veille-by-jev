@@ -20,7 +20,7 @@ tags:
 
 Décrire l'étage de jugement du pipeline : ce qu'on envoie (l'état), ce qu'on demande (les questions), et comment les réponses sont combinées.
 
-Retour à l'index : [Veille Audio](../README.md) · étape amont : [Workflow du pipeline](<Workflow du pipeline.md>).
+Retour à l'index : [veille-by-jev](../README.md) · étape amont : [Workflow du pipeline](<Workflow du pipeline.md>).
 
 ## Pourquoi un modèle de décision plutôt qu'un LLM
 

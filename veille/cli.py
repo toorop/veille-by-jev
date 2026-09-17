@@ -24,7 +24,7 @@ from veille.store import ROOT, items_path, read_json, write_json
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Veille Audio — pipeline de veille Hacker News vers un digest Markdown en français.",
+    help="veille-by-jev — pipeline de veille Hacker News vers un digest Markdown en français.",
 )
 
 SOURCE_MODULES = {"hn": hn}
@@ -48,7 +48,7 @@ def _iso(moment: datetime) -> str:
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"veille-audio {__version__}")
+        typer.echo(f"veille-by-jev {__version__}")
         raise typer.Exit()
 
 
@@ -59,7 +59,7 @@ def main(
         typer.Option("--version", callback=_version_callback, is_eager=True, help="Affiche la version."),
     ] = False,
 ) -> None:
-    """Veille Audio — collecte, triage et rédaction d'un digest quotidien."""
+    """veille-by-jev — collecte, triage et rédaction d'un digest quotidien."""
 
 
 @app.command()
@@ -138,7 +138,7 @@ def collect(
 
     # --- compte rendu : le rapport par source passe avant toute décision, pour
     # qu'un run vide se lise comme « source en panne » ou « journée pauvre » ---
-    typer.echo(f"veille collect --date {day.isoformat()}")
+    typer.echo(f"vbj collect --date {day.isoformat()}")
     typer.echo(f"  fuseau    : {window.timezone} — fenêtre UTC {_iso(window.start)} → {_iso(window.end)}")
     for outcome in outcomes:
         report = outcome.report

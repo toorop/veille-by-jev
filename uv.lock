@@ -303,7 +303,7 @@ wheels = [
 ]
 
 [[package]]
-name = "veille-audio"
+name = "veille-by-jev"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

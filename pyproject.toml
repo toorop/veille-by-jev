@@ -1,5 +1,5 @@
 [project]
-name = "veille-audio"
+name = "veille-by-jev"
 version = "0.1.0"
 description = "Veille technologique Hacker News transformée en digest Markdown quotidien en français"
 readme = "README.md"
@@ -11,7 +11,8 @@ dependencies = [
 ]
 
 [project.scripts]
-veille = "veille.cli:app"
+# Commande courte : `vbj` pour veille-by-jev.
+vbj = "veille.cli:app"
 
 [build-system]
 requires = ["hatchling"]

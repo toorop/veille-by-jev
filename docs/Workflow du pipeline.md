@@ -19,7 +19,7 @@ tags:
 
 Décrire les cinq étapes du pipeline, leurs entrées et sorties, et les invariants qui rendent le tout rejouable et débogable.
 
-Retour à l'index : [Veille Audio](../README.md).
+Retour à l'index : [veille-by-jev](../README.md).
 
 ## Principe d'architecture
 
@@ -33,7 +33,7 @@ Trois raisons :
 
 ## Les cinq étapes
 
-### 1. Collecte — `veille collect --date AAAA-MM-JJ`
+### 1. Collecte — `vbj collect --date AAAA-MM-JJ`
 
 - Entrée : configuration des sources.
 - Sortie : `data/<date>/items.json` — un enregistrement par item : identifiant stable, source, URL, titre, score de la source, nombre de commentaires, horodatage de publication.
@@ -41,7 +41,7 @@ Trois raisons :
 - Pour Hacker News : `https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=N` (vérifié 2026-09-17). Le tri par points sur une fenêtre glissante de 24 h est préférable au seul `front_page`, sinon la collecte dépend de l'heure d'exécution.
 - Échec d'une source : journalisé, l'étape continue.
 
-### 2. Enrichissement — `veille enrich --date AAAA-MM-JJ`
+### 2. Enrichissement — `vbj enrich --date AAAA-MM-JJ`
 
 - Entrée : `items.json`.
 - Sortie : `data/<date>/enriched/<hash>.json` — texte principal extrait puis tronqué, plus les commentaires HN retenus.
@@ -50,13 +50,13 @@ Trois raisons :
 - **Cache obligatoire**, indexé par empreinte de l'URL. Un article déjà enrichi n'est jamais retéléchargé.
 - Un item dont l'article est inaccessible (paywall, erreur) reste dans le lot avec un état « texte indisponible » : le triage peut alors juger sur le titre et les métadonnées seules.
 
-### 3. Triage — `veille triage --date AAAA-MM-JJ`
+### 3. Triage — `vbj triage --date AAAA-MM-JJ`
 
 - Entrée : `items.json` + `enriched/` + `config/questions.toml`.
 - Sortie : `data/<date>/scores.json` — pour chaque item, la réponse typée à chaque question, avec sa distribution et sa confiance, puis le score agrégé calculé dans le code.
 - Détail complet dans [Triage TypeSafe](<Triage TypeSafe.md>).
 
-### 4. Rédaction — `veille write --date AAAA-MM-JJ`
+### 4. Rédaction — `vbj write --date AAAA-MM-JJ`
 
 - Entrée : les N items retenus par le triage, avec leur texte complet.
 - Sortie : `digest/<date>.md` — c'est **le livrable**.
@@ -70,7 +70,7 @@ Script à deux voix → TTS local → flux RSS podcast. Le digest Markdown est l
 ## Arborescence
 
 ```text
-Veille Audio/                 # racine du dépôt
+veille-by-jev/                 # racine du dépôt
   README.md
   docs/                       # documentation de cadrage
   pyproject.toml
@@ -109,10 +109,10 @@ Aucune base de données en V1. Le suivi du « déjà vu » tient dans un `seen.j
 À l'issue de V1, les commandes suivantes doivent fonctionner sans intervention et sans erreur :
 
 ```bash
-uv run veille collect --date 2026-09-20
-uv run veille enrich  --date 2026-09-20
-uv run veille triage  --date 2026-09-20
-uv run veille write   --date 2026-09-20
+uv run vbj collect --date 2026-09-20
+uv run vbj enrich  --date 2026-09-20
+uv run vbj triage  --date 2026-09-20
+uv run vbj write   --date 2026-09-20
 ```
 
 Critère d'acceptation : la quatrième produit un `digest/2026-09-20.md` que Stéphane lit jusqu'au bout. C'est le seul juge qui compte à ce stade.
