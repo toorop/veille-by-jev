@@ -1,17 +1,3 @@
----
-title: Implementation journal
-aliases:
-  - Implementation journal
-type: journal
-status: V1 in progress — collection operational
-created: 2026-09-17
-updated: 2026-09-17
-tags:
-  - technology-watch
-  - journal
-  - decisions
----
-
 # Implementation journal
 
 Back to the index: [veille-by-jev](../README.md).

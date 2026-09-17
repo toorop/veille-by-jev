@@ -1,19 +1,3 @@
----
-title: TypeSafe triage
-aliases:
-  - TypeSafe triage
-type: procedure
-status: V1 in progress — stage 1 done (collection)
-created: 2026-09-17
-updated: 2026-09-17
-tags:
-  - technology-watch
-  - triage
-  - typesafe
-  - jev
-  - curation
----
-
 # TypeSafe triage
 
 ## Purpose

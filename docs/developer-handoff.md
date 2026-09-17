@@ -1,19 +1,3 @@
----
-title: Developer handoff
-aliases:
-  - Developer handoff
-type: procedure
-status: V1 in progress — stage 1 done (collection)
-created: 2026-09-17
-updated: 2026-09-17
-tags:
-  - technology-watch
-  - handoff
-  - python
-  - cli
-  - typesafe
----
-
 # Developer handoff
 
 ## Purpose of this document
