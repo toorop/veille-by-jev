@@ -59,6 +59,12 @@ Three reasons:
 - Input: `items.json` + `enriched/` + `config/questions.toml`.
 - Output: `data/<date>/scores.json` — for each item, the typed answer to each question, with
   its distribution and confidence, then the aggregate score computed in code.
+- Only items that were actually enriched are scored, and each one costs a single call: the state
+  is that item, and all the questions about it travel together, ingested once.
+- The confidence filter runs before the ranking: an item whose weakest confidence falls below
+  the configured threshold is dropped without discussion.
+- The grid is snapshotted into `scores.json` next to the scores, so a ranking can be traced back
+  to the questions that produced it.
 - Full detail in [TypeSafe triage](typesafe-triage.md).
 
 ### 4. Writing — `vbj write --date YYYY-MM-DD`

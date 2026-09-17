@@ -104,10 +104,10 @@ Facts verified on **2026-09-17**:
 
 ## Status
 
-**Phase:** V1 in progress — stages 1 and 2 of 4 (`collect`, `enrich`) are operational
+**Phase:** V1 in progress — stages 1, 2 and 3 of 4 (`collect`, `enrich`, `triage`) are operational
 **Last updated:** 2026-09-17
 
-Stages 1 and 2 are implemented and exercised on a real Hacker News day (2026-09-16):
+The three stages are implemented and exercised on a real Hacker News day (2026-09-16):
 
 | Measurement | Value |
 | --- | --- |
@@ -117,11 +117,16 @@ Stages 1 and 2 are implemented and exercised on a real Hacker News day (2026-09-
 | Articles with usable text | 17 of 20 in a development run; 3 pages were JavaScript shells or posts and became metadata-only |
 | Text kept per article | 2,000 estimated tokens at most, 1,517 median, cut at a sentence boundary |
 | Hacker News comments kept | 5 per item, the first top-level ones |
-| Model calls, cost | 0, USD 0.00 |
+| Triage input, measured | 2,403 tokens per item, about 0.6 s per call |
+| Triage cost | USD 0.000505 for 5 items; USD 0.61 per month at 200 items a night |
+| Rating quality | applied AI and tooling between 1.93 and 2.80, a political story at 0.20 |
 
-`triage` and `write` are not implemented; no API key has been used yet, so the TypeSafe cost
-figures above are still sizing hypotheses rather than measurements. The full 200-item
-enrichment was deliberately not launched during development: the duration line is an
-extrapolation from a 20-item run, not a measurement. The project is developed one stage at a
-time, each stage verified against real data before the next one starts; 69 tests cover stages 1
-and 2 without touching the network.
+`write` is not implemented. The full 200-item enrichment was deliberately not launched during
+development: the duration lines are extrapolations from a 20-item run, not measurements. The
+project is developed one stage at a time, each stage verified against real data before the next
+one starts; 116 tests cover the three stages without touching the network or the provider.
+
+Two honest caveats, both measured rather than assumed. The engine is **not deterministic**: two
+runs over the same five items moved scores by up to 0.05 and confidences by about 0.01, so
+`--force` does not reproduce a ranking exactly. And the character-based token estimate used to
+bound the state understates the invoice by a factor of 1.22.

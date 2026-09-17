@@ -18,13 +18,24 @@ from typing import Annotated, NoReturn
 
 import typer
 from pydantic import ValidationError
+from typesafe_sdk import TypeSafeError
 
 from veille import __version__
-from veille.config import day_window, load_sources_config
+from veille.config import day_window, load_questions_config, load_sources_config
 from veille.enrich import enrich_day
-from veille.models import CollectOutcome, Item, SourceReport, deduplicate
+from veille.env import load_dotenv
+from veille.models import CollectOutcome, Item, ItemScore, SourceReport, deduplicate
 from veille.sources import hn
-from veille.store import ROOT, enriched_dir, items_path, read_json, write_json
+from veille.store import (
+    ROOT,
+    enriched_dir,
+    iso_utc,
+    items_path,
+    read_json,
+    scores_path,
+    write_json,
+)
+from veille.triage import triage_day
 
 app = typer.Typer(
     add_completion=False,
@@ -56,17 +67,26 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def preview_value(score: ItemScore) -> float:
+    """Rank items for the end-of-run preview.
+
+    Stage 3 has a single question, so the highest score answer is the ranking. Once the
+    weighted aggregation lands, this is where the aggregate will be read instead.
+    """
+    values = [
+        float(answer.value)
+        for answer in score.answers
+        if answer.type == "score" and isinstance(answer.value, float)
+    ]
+    return max(values) if values else -1.0
+
+
 def _parse_day(raw: str) -> date:
     """Parse a `YYYY-MM-DD` option value, exiting with a clear message otherwise."""
     try:
         return date.fromisoformat(raw)
     except ValueError:
         _fail(f"Invalid date: {raw!r}. Expected format: YYYY-MM-DD (for example 2026-09-16).")
-
-
-def _iso(moment: datetime) -> str:
-    """Format an instant as an explicit UTC ISO 8601 string ending in `Z`."""
-    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _version_callback(value: bool) -> None:
@@ -86,6 +106,9 @@ def main(
     ] = False,
 ) -> None:
     """Run the veille-by-jev pipeline, one subcommand per stage."""
+    # Read .env before any stage runs, so that a locally stored API key is available
+    # without a shell setup. A variable already exported wins over the file.
+    load_dotenv()
 
 
 @app.command()
@@ -163,7 +186,7 @@ def collect(
     # --- Report: the per-source lines come before any decision, so that an empty
     # run reads either as "source down" or as "quiet day" ---
     typer.echo(f"vbj collect --date {day.isoformat()}")
-    utc_range = f"{_iso(window.start)} → {_iso(window.end)}"
+    utc_range = f"{iso_utc(window.start)} → {iso_utc(window.end)}"
     typer.echo(_field("timezone", f"{window.timezone} — UTC window {utc_range}"))
     for outcome in outcomes:
         report = outcome.report
@@ -197,16 +220,20 @@ def collect(
         "schema_version": 2,
         "date": day.isoformat(),
         "timezone": window.timezone,
-        "generated_at": _iso(datetime.now(UTC)),
-        "window": {"start": _iso(window.start), "end": _iso(window.end), "hours": window.hours},
+        "generated_at": iso_utc(datetime.now(UTC)),
+        "window": {
+            "start": iso_utc(window.start),
+            "end": iso_utc(window.end),
+            "hours": window.hours,
+        },
         "settings": {"min_points": settings.collect.min_points},
         "sources": [outcome.report.model_dump(mode="json") for outcome in outcomes],
         "stats": {
             "fetched": fetched,
             "after_score_filter": after_filter,
             "candidates": len(merged),
-            "published_at_min": _iso(min(published)),
-            "published_at_max": _iso(max(published)),
+            "published_at_min": iso_utc(min(published)),
+            "published_at_max": iso_utc(max(published)),
             "duration_s": duration_s,
             "model_calls": 0,
             "cost_usd": 0.0,
@@ -222,7 +249,7 @@ def collect(
         )
     )
     typer.echo(_field("written", f"{_display_path(out_path)} ({out_path.stat().st_size} bytes)"))
-    typer.echo(_field("published", f"{_iso(min(published))} → {_iso(max(published))}"))
+    typer.echo(_field("published", f"{iso_utc(min(published))} → {iso_utc(max(published))}"))
     typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))
 
 
@@ -298,3 +325,120 @@ def enrich(
         _field("written", f"{_display_path(out_dir)}/ ({len(list(out_dir.glob('*.json')))} files)")
     )
     typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))
+
+
+@app.command()
+def triage(
+    raw_date: Annotated[str, typer.Option("--date", help="Civil day to score, as YYYY-MM-DD.")],
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", min=1, help="Score at most N candidates (development aid)."),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Score again even when scores.json already exists."),
+    ] = False,
+) -> None:
+    """Stage 3 — judge the enriched candidates into `data/<date>/scores.json`.
+
+    Asks the questions of `config/questions.toml` to the ranking engine, one call
+    per item, and stores every typed answer with its confidence and distribution.
+    An item whose weakest confidence falls below the configured threshold is
+    dropped without discussion.
+
+    The grid is written next to the scores, so a ranking can always be traced back
+    to the questions that produced it. Replaying a scored day costs nothing unless
+    `--force` is passed.
+    """
+    day = _parse_day(raw_date)
+    try:
+        questions_cfg = load_questions_config()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    except ValidationError as exc:  # pragma: no cover - depends on the file being edited
+        _fail(f"invalid config/questions.toml:\n{exc}")
+
+    cfg = questions_cfg.triage
+    out_path = scores_path(day)
+
+    # Idempotence matters most here: this is the stage that spends money.
+    if out_path.exists() and not force:
+        existing = read_json(out_path)
+        stats = existing.get("stats", {})
+        typer.echo(f"{_display_path(out_path)} already exists — nothing to do.")
+        typer.echo(
+            _field(
+                "scores", f"{stats.get('selected', '?')} items (model {stats.get('model', '?')})"
+            )
+        )
+        typer.echo(_field("cost", f"USD {stats.get('cost_usd', 0.0)} (already spent)"))
+        typer.echo(_field("re-run", "add --force to score again"))
+        return
+
+    source_path = items_path(day)
+    if not source_path.exists():
+        _fail(f"{_display_path(source_path)} not found: run `vbj collect --date {day}` first.")
+
+    items = [Item.model_validate(raw) for raw in read_json(source_path)["items"]]
+    cap = limit if limit is not None else cfg.max_items
+
+    def progress(done: int, total: int) -> None:
+        if done % 25 == 0 or done == total:
+            typer.echo(_field("progress", f"{done}/{total} items"))
+
+    try:
+        outcome = triage_day(
+            day,
+            items,
+            cfg,
+            questions_cfg.questions,
+            limit=limit,
+            on_progress=progress,
+        )
+    except TypeSafeError as exc:
+        _fail(
+            f"the ranking engine refused the call: {exc}\n"
+            "Check TYPESAFE_API_KEY in .env (see .env.example), then try again."
+        )
+
+    report = outcome.report
+    if report.selected == 0:
+        _fail(f"no enriched candidate for {day.isoformat()}: run `vbj enrich --date {day}` first.")
+
+    typer.echo(f"vbj triage --date {day.isoformat()}")
+    typer.echo(
+        _field(
+            "selection",
+            f"{report.selected} of {report.candidates} enriched candidates (cap {cap})",
+        )
+    )
+    typer.echo(
+        _field(
+            "answers",
+            f"{report.answered} scored, {report.failed} failed, {report.passed} above "
+            f"confidence {cfg.min_confidence}, {report.dropped} dropped",
+        )
+    )
+    typer.echo(
+        _field(
+            "tokens",
+            f"{report.input_tokens} input, {report.output_tokens} output, {report.duration_s} s",
+        )
+    )
+    typer.echo(_field("written", f"{_display_path(out_path)} ({out_path.stat().st_size} bytes)"))
+    typer.echo(
+        _field(
+            "cost",
+            f"USD {report.cost_usd:.6f} — {report.input_tokens} input tokens at "
+            f"USD {cfg.price_per_mtok_usd} per million",
+        )
+    )
+
+    typer.echo("  top scores :")
+    for score in sorted(outcome.scores, key=preview_value, reverse=True)[:5]:
+        verdict = "kept" if score.passed else ("failed" if score.error else "dropped")
+        confidence = "n/a" if score.confidence is None else f"{score.confidence:.2f}"
+        typer.echo(
+            f"    {preview_value(score):>4.1f}  conf {confidence:<4} {verdict:<7} "
+            f"{score.title[:56]}"
+        )

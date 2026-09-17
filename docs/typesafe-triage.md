@@ -68,31 +68,38 @@ def score_item(answers: dict) -> float:
 Two rules attached to that aggregation:
 
 - **Confidence filters before ranking.** An item whose confidence falls below the configured
-  threshold is dropped without discussion, even when its score is good.
+  threshold is dropped without discussion, even when its score is good. The threshold is 0.50
+  in `config/questions.toml`, calibrated on the first real run: at 0.6 it discarded the
+  best-scored item of the day, which had come back at exactly 0.500 while the other four sat
+  between 0.80 and 0.90.
 - **The ranking is logged**, not just the result: every item's score is kept so the grid can
-  be contested after the fact.
+  be contested after the fact. The grid itself is written into `scores.json` for the same
+  reason.
 
 ## Costs
 
-Sizing hypotheses (to be replaced by measurements at the first real run): **200 items per
-night**, **1,500 state tokens per item**.
+Measured on the first real run (2026-09-16, five items), which replaces the sizing hypotheses:
+**200 items per night** and **2,403 input tokens per item**.
 
-Update of 2026-09-17: collection now keeps every candidate of the day (984 on 2026-09-16), so
-the number of items entering triage has become a triage-side setting, still to be chosen. The
-figures below still assume 200.
+Update of 2026-09-17: collection now keeps every candidate of the day (984 on 2026-09-16) and
+enrichment caps what enters triage at 200, so the figures below are for 200 items.
 
 | Item | Volume | Cost |
 | --- | --- | --- |
-| Total state sent | 0.30 million tokens per night, 9.0 million per month | — |
-| Jev triage | input at USD 0.042 per million tokens, output free | **USD 0.38 per month** |
-| Same volume with an LLM at USD 1 per million on input | plus an estimated 2.40 million output tokens per month | about USD 11 per month |
-| Same volume with an LLM at USD 3 per million on input | same | about USD 34 per month |
-| Pessimistic hypothesis: each of the 4 questions consumes the state again | 36 million tokens per month | USD 1.51 per month |
+| Total state sent | 0.48 million tokens per night, 14.4 million per month | — |
+| Jev triage, measured | input at USD 0.042 per million tokens, output free | **USD 0.61 per month** |
+| Same volume with an LLM at USD 1 per million on input | plus an estimated 2.40 million output tokens per month | about USD 14 per month |
+| Same volume with an LLM at USD 3 per million on input | same | about USD 43 per month |
 
-An honest reading of that table: the gain is real (a factor of 30 over the month) but **the
+An honest reading of that table: the gain is real (a factor of 20 over the month) but **the
 absolute amounts are negligible either way**. The case for Jev therefore does not rest on
 money, but on the reliability of the format, the absence of paid retries and parallelisation
 without degradation.
+
+One earlier hypothesis was wrong and is worth recording: the pessimistic line that had each of
+the four questions consume the state again (36 million tokens a month) does not describe the
+API. One call carries the state and every question, and the state is ingested once, so adding
+questions costs tokens for the questions themselves and nothing more.
 
 The real economic gain comes from elsewhere: triage reduces 200 items to 8, so the generative
 LLM is never paid for 200 full texts. It is that filtering ratio which carries the saving, not
@@ -103,10 +110,17 @@ the unit price.
 - **Closed beta**, recent player: the call must go through an adapter
   (`clients/typesafe.py`) that can be swapped for a small local model, without touching the
   rest of the pipeline.
-- **Announced speed not verified**: the claim of being "up to 200 times faster" comes from
-  the vendor's communication, not from a reproduced measurement.
+- **Not deterministic.** Two runs over the same five items gave scores differing by up to 0.05
+  and confidences by about 0.01. A threshold sitting exactly on an observed value can
+  therefore flip between runs, and `--force` does not reproduce a ranking bit for bit.
+- **Measured latency**: about 0.6 s per call on a single item, against the 70 to 500 ms
+  announced by the vendor. Consistent with a five-level question on a 2,400-token state, but
+  it is a measurement on five items, not a benchmark.
+- **The billing basis is assumed.** The printed cost applies the price list to `input_tokens`
+  because the provider's own `billing_units` field never reaches the public response object;
+  the first invoice is what will confirm it.
 - **A local ranking model is free at the margin** on the target machine. Against it, Jev is
   not cheaper in money, but it is in time, in confidence calibration and in format guarantees
   — and it leaves the GPU free for the V3 TTS.
-- **Order of magnitude**: the volumes above are sizing hypotheses. The first real run must
-  replace them with measurements, and this note must be updated accordingly.
+- **Order of magnitude**: the volumes above come from five items on one night. A full run over
+  a varied batch is what would make them solid.

@@ -143,6 +143,72 @@ all three would have entered triage as if they were articles.
 - Refusing to cache an item whose thread failed: the article text is the deliverable, and a
   network hiccup on a comment should not cost another article fetch.
 
+## 2026-09-17 — stage 3: triage
+
+### What was built
+
+- `vbj triage --date YYYY-MM-DD`: reads `items.json`, keeps the enriched candidates, asks the
+  questions of `config/questions.toml` to Jev — one call per item — and writes
+  `data/<date>/scores.json` with every typed answer, its confidence and its distribution.
+- The grid is snapshotted into `scores.json` alongside the scores, so a ranking can always be
+  traced back to the questions that produced it.
+- The confidence filter runs before the ranking: an item whose weakest confidence falls below
+  the threshold is dropped without discussion.
+- `.env` is read at startup, so a locally stored key works without any shell setup; a variable
+  already exported always wins over the file.
+- 116 tests, still with none touching the network or the provider.
+
+### What the first real run measured (5 items, 2026-09-16)
+
+| Quantity | Hypothesis | Measured |
+| --- | --- | --- |
+| Input tokens per item | 1,500 | **2,403** |
+| Estimate against the invoice | — | 9,862 estimated, 12,016 billed: a factor of 1.22 |
+| Monthly triage cost at 200 items | USD 0.38 | **USD 0.61** |
+| Cost of this run | — | USD 0.000505 |
+| Latency per call | 70 to 500 ms announced | about 0.6 s |
+
+The scores separate applied AI and tooling (1.93 to 2.80) from a political story (0.20), which
+is what the five levels were written for.
+
+### The engine is not deterministic
+
+Two runs over the same five items gave slightly different answers:
+
+| Item | Run 1 | Run 2 |
+| --- | --- | --- |
+| Nvidia announces native GPU programming in Rust | 2.750 / 0.500 | 2.800 / 0.510 |
+| Mistral X Mozilla | 2.100 / 0.800 | 2.080 / 0.800 |
+| Training a 4B model for faster query plans | 2.010 / 0.870 | 2.020 / 0.880 |
+
+Scores move by up to about 0.05 and confidences by about 0.01. `--force` therefore does not
+reproduce the same ranking exactly: the idempotence invariant protects the file and the money,
+not the bit-for-bit reproducibility of a judgement. A threshold sitting exactly on an observed
+value can flip between runs.
+
+### Decisions taken at this stage
+
+- **The grid is written in English.** The engine reads it, and English is what it handles best;
+  French stays reserved for the digest, the only thing a human reads.
+- **The confidence threshold went from 0.6 to 0.50.** On the first run the best-scored item of
+  the day came back at exactly 0.500 and was discarded, while the other four sat between 0.80
+  and 0.90. On a five-level scale, hesitating between two neighbouring levels lands near 0.5,
+  so 0.6 was throwing away the day's biggest news rather than genuinely uncertain items.
+- **One call per item.** The state is one article and the questions are about it. Batching
+  several items into one call would need per-item question names and would blur the state.
+- **The printed cost applies the price list to `input_tokens`.** The provider's own
+  `billing_units` field never reaches the public response object, so the first invoice is what
+  will confirm the basis.
+
+### What was rejected
+
+- **A French grid.** It reads better for a human, but no human reads it: the engine does.
+- **Trusting the character-based token estimate without calibrating it.** The measured factor is
+  1.22; treating 4.0 characters per token as exact understated every cost estimate by a fifth.
+- **Parsing the response in a way that loses the accounting.** The first attempt failed inside
+  normalisation *after* five calls had been billed, and reported zero tokens. The usage is now
+  carried on every path, including the failure one.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -154,9 +220,12 @@ stages not yet written.
 | HTTP requests for collection | not estimated | 1 | 2026-09-17 |
 | Duration of collection | not estimated | 0.9 s | 2026-09-17 |
 | Share of articles with usable text | not estimated | 17 of 20 in a development run | 2026-09-17 |
-| State tokens per item | 1,500 | 1,517 median of text alone, comments excluded | 2026-09-17 |
+| State tokens per item | 1,500 | 2,403 billed tokens per item | 2026-09-17 |
+| Text tokens per readable item | 1,500 | 1,517 median of text alone, comments excluded | 2026-09-17 |
+| Character-based estimate against the invoice | — | a factor of 1.22 | 2026-09-17 |
 | Duration of enrichment | not estimated | 80 s for 20 items, about 13 min extrapolated for 200 | 2026-09-17 |
-| Triage cost per month | USD 0.38 | — | — |
+| Latency of one triage call | 70 to 500 ms announced | about 0.6 s | 2026-09-17 |
+| Triage cost per month | USD 0.38 | USD 0.61 at 200 items per night | 2026-09-17 |
 | Writing cost per month | not quantified | — | — |
 | Total duration of the nightly run | not estimated | — | — |
 
@@ -164,7 +233,7 @@ stages not yet written.
 
 - [x] `collect` operational on a real day
 - [x] `enrich` operational, with cache and failure tolerance
-- [ ] `triage` operational with a single question
+- [x] `triage` operational with a single question
 - [ ] full grid and coefficients in `config/questions.toml`
 - [ ] `write` operational, digest in French
 - [ ] first digest read all the way through by Stéphane
@@ -185,3 +254,5 @@ stages not yet written.
 | 2026-09-17 | Enrichment cap of 200 items | First stage where fetching costs time, and the start of the state triage pays for |
 | 2026-09-17 | 2,000-token ceiling, 200-token floor for article text | At 1,200 the median article was cut for nothing; at the other end a 10-token extraction was called an article |
 | 2026-09-17 | Five first top-level comments, inserted order | The value is often in the thread; the API order is honest but not sorted by score |
+| 2026-09-17 | Grid written in English, French reserved for the digest | The engine reads the grid; no human does |
+| 2026-09-17 | Confidence threshold lowered from 0.6 to 0.50 | On a five-level scale, 0.6 discarded the day's best-scored item at a confidence of exactly 0.500 |

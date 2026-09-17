@@ -1,0 +1,35 @@
+# Triage configuration — stage 3 of the pipeline.
+# This is the file to iterate on triage quality: nothing here should ever require
+# touching code.
+#
+# The grid is written in English, like the rest of the configuration: the engine reads
+# it, and English is what it handles best. French is reserved for the digest, which is
+# the only thing a human reads.
+
+[triage]
+# Jev model name; the SDK default is "jev-latest".
+model = "jev-latest"
+# Confidence below which an item is dropped without discussion, whatever its score.
+# Calibrated on the first real run (2026-09-16, five items): the best-scored item of
+# the day came back at 0.500, and the other four between 0.80 and 0.89. On a five-level
+# scale, hesitating between two neighbouring levels naturally lands near 0.5, so 0.6 was
+# discarding the day's biggest news rather than genuinely uncertain items.
+min_confidence = 0.50
+# Input price in USD per million tokens, used to print the cost of a run. Output is
+# free. The response reports the real token counts, which may differ from this price
+# list; the note in docs/ is updated from measurements, not from this file.
+price_per_mtok_usd = 0.042
+
+# One `Score`: a position on an ordered spectrum, described level by level. `score`
+# comes back as a float that can land between two levels, so the levels should read
+# as a progression rather than as boxes.
+[questions.interest]
+type = "score"
+instructions = "Interest for a French-speaking developer who follows applied AI and local tooling."
+criteria = [
+  "No interest: marketing, fundraising, or a topic outside the field",
+  "Marginal: a small tool or a minor announcement",
+  "Useful: a solid article or a release a practitioner would read",
+  "Important: a technique or a tool that changes daily practice",
+  "Essential: a major release, a foundational paper, or a shift in the field",
+]

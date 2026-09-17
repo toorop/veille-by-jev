@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.7",
     "trafilatura>=2.2.0",
     "typer>=0.12",
+    "typesafe-sdk>=0.6.0",
 ]
 
 [project.scripts]
@@ -39,6 +40,8 @@ line-length = 100
 # E/W: pycodestyle, F: pyflakes, I: import sorting, N: pep8-naming,
 # UP: pyupgrade, B: bugbear, SIM: simplify, D: pydocstyle (Google style).
 select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "D"]
+# Magic methods carry nothing a docstring could add.
+ignore = ["D105"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

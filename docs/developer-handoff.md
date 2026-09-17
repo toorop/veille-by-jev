@@ -123,7 +123,8 @@ single batch.
 2. ✅ `enrich` with cache, checking that roughly 2,000 tokens of text are extracted from a real
    article, and that an empty page is marked unavailable rather than passed on as an article
    (done 2026-09-17).
-3. `triage` with **a single** question, to validate the call contract and the answer format.
+3. ✅ `triage` with **a single** question, to validate the call contract and the answer format
+   (done 2026-09-17: five real items on 2026-09-16, 12,016 input tokens, USD 0.000505).
 4. Add the other questions and the weighted aggregation.
 5. `write` and the first real read of the digest.
 6. Only after that: tuning the grid, adding sources.

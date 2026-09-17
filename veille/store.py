@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +59,15 @@ def url_fingerprint(url: str) -> str:
     readable in a tree that gets inspected by hand.
     """
     return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def iso_utc(moment: datetime) -> str:
+    """Format an instant as an explicit UTC ISO 8601 string ending in `Z`.
+
+    Every timestamp written to `data/` goes through here, so two files of the same run
+    cannot disagree on the format.
+    """
+    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def write_json(path: Path, payload: Any) -> None:

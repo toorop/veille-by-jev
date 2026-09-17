@@ -6,8 +6,15 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from veille.config import MAX_HITS_PER_QUERY, CollectConfig, day_window, load_sources_config
+from veille.config import (
+    MAX_HITS_PER_QUERY,
+    CollectConfig,
+    day_window,
+    load_questions_config,
+    load_sources_config,
+)
 
 
 def test_civil_day_window_is_a_plain_day() -> None:
@@ -92,6 +99,64 @@ def test_custom_configuration_is_parsed_and_disabled_sources_are_skipped(
 def test_missing_configuration_file_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         load_sources_config(tmp_path / "absent.toml")
+
+
+def test_shipped_grid_is_valid() -> None:
+    grid = load_questions_config()
+    assert grid.triage.model == "jev-latest"
+    assert grid.triage.min_confidence == 0.50
+    assert grid.triage.price_per_mtok_usd == 0.042
+    assert list(grid.questions) == ["interest"]
+    interest = grid.questions["interest"]
+    assert interest.type == "score"
+    assert interest.instructions
+    assert isinstance(interest.criteria, list)
+    assert len(interest.criteria) == 5
+
+
+def test_a_choice_question_is_parsed(tmp_path: Path) -> None:
+    custom = tmp_path / "questions.toml"
+    custom.write_text(
+        "[questions.category]\n"
+        'type = "choice"\n'
+        'instructions = "Catégorie"\n'
+        "[questions.category.criteria]\n"
+        'research = "papier"\n'
+        'tooling = "outil"\n',
+        encoding="utf-8",
+    )
+    grid = load_questions_config(custom)
+    assert grid.questions["category"].criteria == {"research": "papier", "tooling": "outil"}
+
+
+def test_a_noul_question_needs_no_criteria(tmp_path: Path) -> None:
+    custom = tmp_path / "questions.toml"
+    custom.write_text(
+        '[questions.primary]\ntype = "noul"\ninstructions = "Source primaire ?"\n',
+        encoding="utf-8",
+    )
+    assert load_questions_config(custom).questions["primary"].criteria is None
+
+
+def test_a_score_without_levels_is_rejected(tmp_path: Path) -> None:
+    custom = tmp_path / "questions.toml"
+    custom.write_text('[questions.interest]\ntype = "score"\n', encoding="utf-8")
+    with pytest.raises(ValidationError, match="ordered list of levels"):
+        load_questions_config(custom)
+
+
+def test_a_choice_with_a_list_is_rejected(tmp_path: Path) -> None:
+    custom = tmp_path / "questions.toml"
+    custom.write_text(
+        '[questions.category]\ntype = "choice"\ncriteria = ["a", "b"]\n', encoding="utf-8"
+    )
+    with pytest.raises(ValidationError, match="table of options"):
+        load_questions_config(custom)
+
+
+def test_missing_grid_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_questions_config(tmp_path / "absent.toml")
 
 
 def test_collection_carries_no_item_cap() -> None:

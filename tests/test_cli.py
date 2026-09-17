@@ -71,3 +71,12 @@ def test_display_path_falls_back_to_absolute_outside_the_project(tmp_path: Path)
 
     assert _display_path(tmp_path / "items.json") == str(tmp_path / "items.json")
     assert _display_path(Path("data") / date(2026, 9, 16).isoformat()) == "data/2026-09-16"
+
+
+def test_the_callback_loads_the_local_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+    monkeypatch.setattr("veille.cli.load_dotenv", lambda: calls.append(1))
+
+    runner.invoke(app, ["collect", "--date", "2026-09-16"])
+
+    assert calls == [1]

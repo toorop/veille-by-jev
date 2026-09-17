@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -145,6 +145,92 @@ class EnrichReport(BaseModel):
     requests: int = 0
     text_tokens: int = Field(default=0, description="Estimated tokens written, selected only.")
     duration_s: float = 0.0
+
+
+class AnswerRecord(BaseModel):
+    """One typed answer, normalised so the triage engine stays replaceable.
+
+    The engine's own answer objects never leave the adapter: triage stores this shape
+    instead, and a local ranking model would only have to produce the same fields.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    type: Literal["score", "choice", "noul"]
+    value: float | str = Field(description="Score position, chosen option, or noul probability.")
+    confidence: float | None = Field(
+        default=None, description="Absent for a noul, whose value already is the belief."
+    )
+    probabilities: dict[str, float] = Field(default_factory=dict)
+    legend: dict[str, Any] = Field(
+        default_factory=dict, description="Level labels of a score, kept as the engine echoed them."
+    )
+
+
+class TriageUsage(BaseModel):
+    """What one engine call cost, as the provider reported it.
+
+    The SDK exposes only these two counters: the protocol also carries a `billing_units`
+    field, but the public response drops it, so the printed cost applies the price list to
+    `input_tokens` and the first invoice is what will confirm it.
+    """
+
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+class EngineAnswer(BaseModel):
+    """What one engine call produced.
+
+    The usage is carried even when reading an answer failed locally: a call that was made
+    is a call that gets billed, whether or not this code managed to parse it.
+    """
+
+    answers: list[AnswerRecord] = Field(default_factory=list)
+    usage: TriageUsage = Field(default_factory=TriageUsage)
+    error: str | None = Field(
+        default=None, description="Why an answer could not be read, when that happened."
+    )
+
+
+class ItemScore(BaseModel):
+    """Everything triage concluded about one item."""
+
+    item_id: str
+    url: str
+    title: str
+    points: int = 0
+    num_comments: int = 0
+    answers: list[AnswerRecord] = Field(default_factory=list)
+    confidence: float | None = Field(
+        default=None, description="Weakest confidence among the answers."
+    )
+    passed: bool = Field(default=False, description="Whether confidence cleared the threshold.")
+    error: str | None = None
+
+
+class TriageReport(BaseModel):
+    """What one triage run did, as printed at the end of the command."""
+
+    candidates: int = Field(default=0, description="Enriched candidates available.")
+    selected: int = Field(default=0, description="Candidates inside the cap.")
+    answered: int = 0
+    failed: int = 0
+    passed: int = Field(default=0, description="Items whose confidence cleared the threshold.")
+    dropped: int = Field(default=0, description="Items dropped by the confidence threshold.")
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+    duration_s: float = 0.0
+    model: str = ""
+
+
+class TriageOutcome(BaseModel):
+    """Result of one triage run: what it cost, and what it concluded per item."""
+
+    report: TriageReport
+    scores: list[ItemScore] = Field(default_factory=list)
 
 
 def deduplicate(items: Iterable[Item]) -> list[Item]:

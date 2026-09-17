@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from veille.models import Window
 from veille.store import CONFIG_DIR
@@ -83,6 +83,53 @@ class SourcesConfig(BaseModel):
         return {name: cfg for name, cfg in self.sources.items() if cfg.enabled}
 
 
+class TriageConfig(BaseModel):
+    """Provider settings of the triage stage, from `config/questions.toml`."""
+
+    model: str = Field(default="jev-latest", description="Model name passed to the engine.")
+    min_confidence: float = Field(
+        default=0.50,
+        ge=0.0,
+        le=1.0,
+        description="Below this, an item is dropped without discussion.",
+    )
+    price_per_mtok_usd: float = Field(
+        default=0.042,
+        ge=0.0,
+        description="Input price per million tokens, for the printed cost.",
+    )
+    max_items: int = Field(default=200, ge=1, description="Candidates triaged per night.")
+    timeout_s: float = Field(default=30.0, gt=0)
+    max_retries: int = Field(default=2, ge=0, description="Retries on a retryable failure.")
+
+
+class QuestionSpec(BaseModel):
+    """One typed question, as written in the configuration.
+
+    The shape of `criteria` depends on `type`: an ordered list of described levels for a
+    `score`, a table of option to description for a `choice`, unused for a `noul`.
+    """
+
+    type: Literal["score", "choice", "noul"]
+    instructions: str = ""
+    criteria: list[str] | dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _check_criteria(self) -> QuestionSpec:
+        if self.type == "score" and not isinstance(self.criteria, list):
+            raise ValueError("a score question needs `criteria` as an ordered list of levels")
+        if self.type == "choice" and not isinstance(self.criteria, dict):
+            raise ValueError("a choice question needs `criteria` as a table of options")
+        return self
+
+
+class QuestionsConfig(BaseModel):
+    """Whole content of `config/questions.toml`: the scoring grid."""
+
+    triage: TriageConfig = Field(default_factory=TriageConfig)
+    questions: dict[str, QuestionSpec] = Field(default_factory=dict)
+
+
 def load_sources_config(path: Path | None = None) -> SourcesConfig:
     """Load `config/sources.toml`.
 
@@ -102,6 +149,27 @@ def load_sources_config(path: Path | None = None) -> SourcesConfig:
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
     return SourcesConfig.model_validate(raw)
+
+
+def load_questions_config(path: Path | None = None) -> QuestionsConfig:
+    """Load `config/questions.toml`, the scoring grid.
+
+    Args:
+        path: File to read; defaults to `config/questions.toml`.
+
+    Returns:
+        The validated grid.
+
+    Raises:
+        FileNotFoundError: If the configuration file does not exist.
+
+    """
+    config_path = path or (CONFIG_DIR / "questions.toml")
+    if not config_path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    with config_path.open("rb") as handle:
+        raw = tomllib.load(handle)
+    return QuestionsConfig.model_validate(raw)
 
 
 def day_window(day: date, tz_name: str) -> Window:
