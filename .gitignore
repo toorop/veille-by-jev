@@ -3,6 +3,7 @@
 
 # Environnement virtuel et caches Python
 .venv/
+.uv-cache/
 __pycache__/
 *.py[cod]
 .pytest_cache/

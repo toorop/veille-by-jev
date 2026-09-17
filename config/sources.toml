@@ -1,0 +1,29 @@
+# Configuration des sources de collecte — étape 1 du pipeline.
+# Ce fichier est fait pour être modifié sans toucher au code.
+
+[collect]
+# Les dates sont des journées civiles dans ce fuseau : --date 2026-09-16 couvre
+# le 2026-09-16 de 00:00 à 24:00 heure locale, converti en UTC pour l'API.
+timezone = "Europe/Paris"
+
+# Nombre d'items retenus par nuit : c'est l'entrée du triage, donc le poste de coût.
+# La collecte garde les meilleurs scores de la fenêtre, pas tout ce qui est publié.
+target_items = 200
+
+# Score HN minimal pour qu'un item soit retenu. 1 écarte les stories à 0 point.
+min_points = 1
+
+[sources.hn]
+enabled = true
+label = "Hacker News"
+# Endpoint Algolia trié par pertinence (les meilleurs scores d'abord), filtré sur
+# une fenêtre de 24 h par created_at_i. Vérifié le 2026-09-17.
+endpoint = "https://hn.algolia.com/api/v1/search"
+# Type d'entrées demandé à l'API : "story" exclut les offres d'emploi.
+tags = "story"
+# 1000 est le maximum accepté par l'API : une seule requête couvre la journée
+# (constaté : 1139 stories publiées sur la journée du 2026-09-16).
+hits_per_page = 1000
+# Nombre de pages maximum à parcourir si la fenêtre dépasse hits_per_page.
+max_pages = 2
+timeout_s = 30.0

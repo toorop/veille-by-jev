@@ -1,0 +1,199 @@
+"""Interface en ligne de commande du pipeline.
+
+Une commande par étape, des fichiers comme interface : `collect`, puis `enrich`,
+`triage` et `write` (étapes suivantes). Chaque commande est rejouable seule pour
+une date donnée, et rejouer une étape déjà faite ne redépense rien sans `--force`.
+"""
+
+from __future__ import annotations
+
+import time
+from datetime import date as Date
+from datetime import datetime, timezone
+from typing import Annotated, NoReturn
+
+import typer
+from pydantic import ValidationError
+
+from veille import __version__
+from veille.config import day_window, load_sources_config
+from veille.models import CollectOutcome, Item, SourceReport
+from veille.sources import hn
+from veille.store import ROOT, items_path, read_json, write_json
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Veille Audio — pipeline de veille Hacker News vers un digest Markdown en français.",
+)
+
+SOURCE_MODULES = {"hn": hn}
+
+
+def _fail(message: str, code: int = 2) -> NoReturn:
+    typer.secho(message, err=True, fg=typer.colors.RED)
+    raise typer.Exit(code=code)
+
+
+def _parse_day(raw: str) -> Date:
+    try:
+        return Date.fromisoformat(raw)
+    except ValueError:
+        _fail(f"Date invalide : {raw!r}. Format attendu : AAAA-MM-JJ (exemple : 2026-09-16).")
+
+
+def _iso(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"veille-audio {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Affiche la version."),
+    ] = False,
+) -> None:
+    """Veille Audio — collecte, triage et rédaction d'un digest quotidien."""
+
+
+@app.command()
+def collect(
+    date: Annotated[str, typer.Option("--date", help="Journée civile à collecter, format AAAA-MM-JJ.")],
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Recollecte même si data/<date>/items.json existe déjà."),
+    ] = False,
+) -> None:
+    """Étape 1 — collecte les items des sources activées dans data/<date>/items.json.
+
+    Aucun appel à un modèle : cette étape est volontairement bête et vérifiable.
+    Un échec de source est journalisé dans le fichier et ne fait pas tomber la commande.
+    """
+    day = _parse_day(date)
+    try:
+        settings = load_sources_config()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    except ValidationError as exc:  # pragma: no cover - dépend du fichier édité
+        _fail(f"config/sources.toml invalide :\n{exc}")
+
+    window = day_window(day, settings.collect.timezone)
+    out_path = items_path(day)
+
+    # Invariant d'idempotence : sans --force, on ne refait pas un travail déjà fait.
+    if out_path.exists() and not force:
+        existing = read_json(out_path)
+        stats = existing.get("stats", {})
+        typer.echo(f"{out_path.relative_to(ROOT)} existe déjà — rien à faire.")
+        typer.echo(f"  items      : {stats.get('selected', '?')} (collecte du {existing.get('generated_at', '?')})")
+        typer.echo(f"  source     : {out_path}")
+        typer.echo("  pour refaire la collecte : ajouter --force")
+        typer.echo("  coût       : 0,00 USD (aucun appel de modèle)")
+        return
+
+    enabled = settings.enabled_sources()
+    if not enabled:
+        _fail("Aucune source activée dans config/sources.toml.")
+
+    started = time.monotonic()
+    outcomes: list[CollectOutcome] = []
+    for name, source_cfg in enabled.items():
+        module = SOURCE_MODULES.get(source_cfg.type)
+        if module is None:
+            outcomes.append(
+                CollectOutcome(
+                    report=SourceReport(
+                        source=name,
+                        label=source_cfg.label,
+                        status="error",
+                        error=f"type de source non implémenté : {source_cfg.type!r}",
+                    )
+                )
+            )
+            continue
+        outcomes.append(module.collect(window, source_cfg, settings.collect, name))
+    duration_s = round(time.monotonic() - started, 2)
+
+    # Fusion et déduplication inter-sources, puis troncature unique à target_items.
+    best_by_url: dict[str, Item] = {}
+    for outcome in outcomes:
+        for item in outcome.items:
+            current = best_by_url.get(item.url)
+            if current is None or (item.points, item.num_comments) > (current.points, current.num_comments):
+                best_by_url[item.url] = item
+    merged = sorted(
+        best_by_url.values(),
+        key=lambda item: (item.points, item.num_comments, item.published_at),
+        reverse=True,
+    )
+    selected = merged[: settings.collect.target_items]
+    fetched = sum(outcome.report.fetched for outcome in outcomes)
+    after_filter = sum(outcome.report.kept for outcome in outcomes)
+
+    # --- compte rendu : le rapport par source passe avant toute décision, pour
+    # qu'un run vide se lise comme « source en panne » ou « journée pauvre » ---
+    typer.echo(f"veille collect --date {day.isoformat()}")
+    typer.echo(f"  fuseau    : {window.timezone} — fenêtre UTC {_iso(window.start)} → {_iso(window.end)}")
+    for outcome in outcomes:
+        report = outcome.report
+        if report.status == "ok":
+            typer.echo(
+                f"  {report.source:<9} : ok — {report.fetched} items bruts, "
+                f"{report.kept} après filtre points >= {settings.collect.min_points}, "
+                f"{report.requests} requête(s), {report.duration_s} s"
+            )
+        else:
+            typer.secho(
+                f"  {report.source:<9} : échec — {report.error}", err=True, fg=typer.colors.YELLOW
+            )
+
+    if not selected:
+        typer.echo(f"  sélection : {after_filter} après filtre → 0 retenu")
+        typer.echo("  coût      : 0,00 USD — aucun appel de modèle à cette étape")
+        _fail(
+            f"Rien à écrire pour le {day.isoformat()} : source en échec ou fenêtre sans item au-dessus "
+            f"de min_points={settings.collect.min_points} (voir le rapport ci-dessus).",
+            code=1,
+        )
+
+    published = [item.published_at for item in selected]
+    payload = {
+        "schema_version": 1,
+        "date": day.isoformat(),
+        "timezone": window.timezone,
+        "generated_at": _iso(datetime.now(timezone.utc)),
+        "window": {"start": _iso(window.start), "end": _iso(window.end), "hours": window.hours},
+        "settings": {
+            "target_items": settings.collect.target_items,
+            "min_points": settings.collect.min_points,
+        },
+        "sources": [outcome.report.model_dump(mode="json") for outcome in outcomes],
+        "stats": {
+            "fetched": fetched,
+            "after_score_filter": after_filter,
+            "after_cross_source_dedup": len(merged),
+            "selected": len(selected),
+            "truncated": max(0, len(merged) - len(selected)),
+            "published_at_min": _iso(min(published)),
+            "published_at_max": _iso(max(published)),
+            "duration_s": duration_s,
+            "model_calls": 0,
+            "cost_usd": 0.0,
+        },
+        "items": [item.model_dump(mode="json") for item in selected],
+    }
+    write_json(out_path, payload)
+
+    typer.echo(
+        f"  sélection : {after_filter} après filtre → {len(merged)} après déduplication "
+        f"→ {len(selected)} retenus (cible {settings.collect.target_items})"
+    )
+    typer.echo(f"  écrit     : {out_path.relative_to(ROOT)} ({out_path.stat().st_size} octets)")
+    typer.echo(f"  publiés   : {_iso(min(published))} → {_iso(max(published))}")
+    typer.echo("  coût      : 0,00 USD — aucun appel de modèle à cette étape")
