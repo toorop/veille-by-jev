@@ -126,11 +126,41 @@ class QuestionSpec(BaseModel):
         return self
 
 
+class AggregationConfig(BaseModel):
+    """How the answers become one ranking value, from `config/questions.toml`."""
+
+    scale: float = Field(
+        default=4.0,
+        gt=0,
+        description="Scale the aggregate is expressed on, matching a five-level Score.",
+    )
+    weights: dict[str, float] = Field(
+        default_factory=dict,
+        description="Relative weight of each question; absent means recorded but unranked.",
+    )
+
+    def normalised(self) -> dict[str, float]:
+        """Return the weights rescaled to sum to one, ignoring the unweighted questions."""
+        total = sum(weight for weight in self.weights.values() if weight > 0)
+        if total <= 0:
+            return {}
+        return {name: weight / total for name, weight in self.weights.items() if weight > 0}
+
+
 class QuestionsConfig(BaseModel):
     """Whole content of `config/questions.toml`: the scoring grid."""
 
     triage: TriageConfig = Field(default_factory=TriageConfig)
+    aggregation: AggregationConfig = Field(default_factory=AggregationConfig)
     questions: dict[str, QuestionSpec] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_weights(self) -> QuestionsConfig:
+        unknown = [name for name in self.aggregation.weights if name not in self.questions]
+        if unknown:
+            # A typo in the weights table would silently drop a question from the ranking.
+            raise ValueError(f"weights name unknown questions: {', '.join(sorted(unknown))}")
+        return self
 
 
 def load_sources_config(path: Path | None = None) -> SourcesConfig:

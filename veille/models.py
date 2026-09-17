@@ -210,7 +210,11 @@ class ItemScore(BaseModel):
         default=None, description="Ranking value: score minus the configured downside penalty."
     )
     spread: float | None = Field(
-        default=None, description="Standard deviation of the level distribution behind it."
+        default=None, description="Weighted downside spread of the ranking value."
+    )
+    components: dict[str, float] = Field(
+        default_factory=dict,
+        description="Normalised contribution of each weighted question, for auditing.",
     )
     passed: bool = Field(default=False, description="Whether it cleared the adjusted threshold.")
     error: str | None = None

@@ -125,7 +125,8 @@ single batch.
    (done 2026-09-17).
 3. ✅ `triage` with **a single** question, to validate the call contract and the answer format
    (done 2026-09-17: five real items on 2026-09-16, 12,016 input tokens, USD 0.000505).
-4. Add the other questions and the weighted aggregation.
+4. ✅ Add the other questions and the weighted aggregation (done 2026-09-17: four questions,
+   weights 0.5 / 0.3 / 0.2, components normalised before weighting).
 5. `write` and the first real read of the digest.
 6. Only after that: tuning the grid, adding sources.
 

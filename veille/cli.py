@@ -383,6 +383,7 @@ def triage(
             items,
             cfg,
             questions_cfg.questions,
+            questions_cfg.aggregation,
             limit=limit,
             on_progress=progress,
         )

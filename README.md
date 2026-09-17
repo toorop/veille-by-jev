@@ -105,10 +105,10 @@ Facts verified on **2026-09-17**:
 
 ## Status
 
-**Phase:** V1 in progress — stages 1, 2 and 3 of 4 (`collect`, `enrich`, `triage`) are operational
+**Phase:** V1 in progress — `collect`, `enrich` and `triage` are operational, the grid is complete, `write` remains
 **Last updated:** 2026-09-17
 
-The three stages are implemented and exercised on a real Hacker News day (2026-09-16):
+The three implemented stages are exercised on a real Hacker News day (2026-09-16):
 
 | Measurement | Value |
 | --- | --- |
@@ -118,17 +118,19 @@ The three stages are implemented and exercised on a real Hacker News day (2026-0
 | Articles with usable text | 17 of 20 in a development run; 3 pages were JavaScript shells or posts and became metadata-only |
 | Text kept per article | 2,000 estimated tokens at most, 1,517 median, cut at a sentence boundary |
 | Hacker News comments kept | 5 per item, the first top-level ones |
-| Triage input, measured | 2,403 tokens per item, about 0.6 s per call |
-| Triage cost | USD 0.000505 for 5 items; USD 0.61 per month at 200 items a night |
-| Rating quality | applied AI and tooling between 1.93 and 2.80, a political story at 0.20 |
-| Ranking rule | `score − z × spread`, a lower bound on the position rather than the position; the best-scored story of the day comes first and the political one is the only drop |
+| Triage input, measured | 2,675 tokens per item with the four-question grid, about 0.6 s per call |
+| Triage cost | USD 0.000562 for 5 items; about USD 0.67 per month at 200 items a night |
+| Grid | four questions, weights 0.5 / 0.3 / 0.2, a category recorded but not ranked |
 
 `write` is not implemented. The full 200-item enrichment was deliberately not launched during
-development: the duration lines are extrapolations from a 20-item run, not measurements. The
-project is developed one stage at a time, each stage verified against real data before the next
-one starts; 116 tests cover the three stages without touching the network or the provider.
+development: the duration lines are extrapolations from a 20-item run, not measurements, and the
+admission floor is still calibrated on five items. The project is developed one stage at a time,
+each stage verified against real data before the next one starts; 134 tests cover the three
+stages without touching the network or the provider.
 
-Two honest caveats, both measured rather than assumed. The engine is **not deterministic**: two
+Three honest caveats, all measured rather than assumed. The engine is **not deterministic**: two
 runs over the same five items moved scores by up to 0.05 and confidences by about 0.01, so
-`--force` does not reproduce a ranking exactly. And the character-based token estimate used to
-bound the state understates the invoice by a factor of 1.22.
+`--force` does not reproduce a ranking exactly. The character-based token estimate used to bound
+the state understates the invoice by a factor of 1.22. And the scoping notes' aggregation formula
+mixed two scales, which gave the primary-source signal a real weight of 5 % where it looked like
+20 %; the components are now normalised before weighting.

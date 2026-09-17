@@ -11,7 +11,7 @@ import pytest
 from typesafe_sdk import Choice, Noul, Score, SystemOneResponse, Usage
 
 from veille.clients.typesafe import build_questions, normalise, usage_from
-from veille.config import QuestionSpec, TriageConfig
+from veille.config import AggregationConfig, QuestionSpec, TriageConfig
 from veille.models import (
     AnswerRecord,
     Comment,
@@ -21,17 +21,24 @@ from veille.models import (
     TriageUsage,
 )
 from veille.triage import (
+    aggregate_scores,
     build_state,
+    component_value,
     level_spread,
     load_enriched,
-    rank_value,
     triage_day,
     weakest_confidence,
 )
 
 DAY = date(2026, 9, 16)
 NOW = datetime(2026, 9, 17, 10, 0, tzinfo=UTC)
-SPECS = {"interest": QuestionSpec(type="score", instructions="Intérêt", criteria=["a", "b", "c"])}
+SPECS = {
+    "interest": QuestionSpec(
+        type="score", instructions="Intérêt", criteria=["a", "b", "c", "d", "e"]
+    )
+}
+# One question, one weight, so the aggregate is that question on the configured scale.
+AGGREGATION = AggregationConfig(scale=4.0, weights={"interest": 1.0})
 
 
 def make_item(item_id: str = "1", *, points: int = 100) -> Item:
@@ -209,30 +216,46 @@ def test_an_unusable_distribution_has_no_spread(probabilities: dict[str, float])
     assert level_spread(probabilities) is None
 
 
-def test_rank_value_subtracts_z_spreads() -> None:
-    answers = [
-        AnswerRecord(
-            name="interest",
-            type="score",
-            value=2.0,
-            confidence=0.5,
-            probabilities={"0": 0.5, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.5},
-        )
-    ]
-    adjusted, spread = rank_value(answers, 1.0)
-
-    assert spread == pytest.approx(2.0)
-    assert adjusted == pytest.approx(0.0)
-    assert rank_value(answers, 0.0)[0] == pytest.approx(2.0)
+SPEC = QuestionSpec(type="score", criteria=["0", "1", "2", "3", "4"])
 
 
-def test_rank_value_without_a_spread_falls_back_to_the_score() -> None:
-    answers = [AnswerRecord(name="interest", type="score", value=2.5, confidence=0.9)]
-    assert rank_value(answers, 1.0) == (2.5, None)
+def test_component_value_normalises_a_score_to_the_unit_interval() -> None:
+    answer = AnswerRecord(
+        name="interest",
+        type="score",
+        value=2.0,
+        confidence=0.9,
+        probabilities={"2": 1.0},
+    )
+    assert component_value(answer, SPEC, 1.0) == pytest.approx((0.5, 0.0))
+    assert component_value(answer, SPEC, 0.0) == pytest.approx((0.5, 0.0))
 
 
-def test_rank_value_without_a_score_answer_is_none() -> None:
-    assert rank_value([AnswerRecord(name="primary", type="noul", value=0.9)], 1.0) == (None, None)
+def test_component_value_subtracts_z_spreads_of_its_own_distribution() -> None:
+    answer = AnswerRecord(
+        name="interest",
+        type="score",
+        value=2.0,
+        confidence=0.5,
+        probabilities={"0": 0.5, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.5},
+    )
+    value, spread = component_value(answer, SPEC, 1.0)
+
+    assert spread == pytest.approx(0.5)  # 2.0 on the level scale, over four levels
+    assert value == pytest.approx(0.0)  # 2.0 - 2.0, then normalised
+    assert component_value(answer, SPEC, 0.0)[0] == pytest.approx(0.5)
+
+
+def test_component_value_of_a_noul_is_its_probability() -> None:
+    answer = AnswerRecord(name="primary_source", type="noul", value=0.8)
+    spec = QuestionSpec(type="noul", instructions="primary?")
+    assert component_value(answer, spec, 1.0) == (0.8, 0.0)
+
+
+def test_component_value_of_a_choice_does_not_rank() -> None:
+    answer = AnswerRecord(name="category", type="choice", value="tooling")
+    spec = QuestionSpec(type="choice", criteria={"tooling": "a tool"})
+    assert component_value(answer, spec, 1.0) is None
 
 
 def test_a_high_score_with_neighbouring_uncertainty_beats_a_certain_middle_score() -> None:
@@ -257,12 +280,91 @@ def test_a_high_score_with_neighbouring_uncertainty_beats_a_certain_middle_score
         probabilities={"0": 0.01, "1": 0.06, "2": 0.80, "3": 0.10, "4": 0.03},
     )
 
-    high_and_uncertain = rank_value([nvidia], 1.0)[0]
-    middle_and_certain = rank_value([mistral], 1.0)[0]
+    high_and_uncertain = component_value(nvidia, SPEC, 1.0)[0]
+    middle_and_certain = component_value(mistral, SPEC, 1.0)[0]
 
-    assert high_and_uncertain is not None
-    assert middle_and_certain is not None
     assert high_and_uncertain > middle_and_certain
+
+
+# --- weighted aggregation -------------------------------------------------------------
+
+
+def test_the_aggregate_normalises_the_scales_before_weighting() -> None:
+    """The scoping notes' formula added a position on 0-4 to a probability on 0-1.
+
+    Read literally it gave the primary-source signal a real weight of 5 % where it looked
+    like 20 %. With every component normalised first, an essential, shallow, primary item
+    lands at 4 x (0.5 x 1.0 + 0.3 x 0.0 + 0.2 x 1.0) = 2.8.
+    """
+    specs = {
+        "interest": QuestionSpec(type="score", criteria=["a"] * 5),
+        "density": QuestionSpec(type="score", criteria=["a"] * 5),
+        "primary_source": QuestionSpec(type="noul"),
+    }
+    answers = [
+        AnswerRecord(name="interest", type="score", value=4.0, probabilities={"4": 1.0}),
+        AnswerRecord(name="density", type="score", value=0.0, probabilities={"0": 1.0}),
+        AnswerRecord(name="primary_source", type="noul", value=1.0),
+    ]
+    aggregation = AggregationConfig(
+        scale=4.0, weights={"interest": 0.5, "density": 0.3, "primary_source": 0.2}
+    )
+
+    result = aggregate_scores(answers, specs, aggregation, penalty_z=0.0)
+
+    assert result is not None
+    assert result.adjusted == pytest.approx(2.8)
+    assert result.components == {"interest": 1.0, "density": 0.0, "primary_source": 1.0}
+
+
+def test_weights_are_relative_and_get_normalised() -> None:
+    specs = {"interest": QuestionSpec(type="score", criteria=["a"] * 5)}
+    answers = [AnswerRecord(name="interest", type="score", value=4.0, probabilities={"4": 1.0})]
+
+    for weights in ({"interest": 1.0}, {"interest": 5.0}, {"interest": 0.2}):
+        result = aggregate_scores(
+            answers, specs, AggregationConfig(scale=4.0, weights=weights), penalty_z=0.0
+        )
+        assert result is not None
+        assert result.adjusted == pytest.approx(4.0)
+
+
+def test_an_unweighted_question_does_not_change_the_aggregate() -> None:
+    specs = {
+        "interest": QuestionSpec(type="score", criteria=["a"] * 5),
+        "category": QuestionSpec(type="choice", criteria={"tooling": "a tool"}),
+    }
+    aggregation = AggregationConfig(scale=4.0, weights={"interest": 1.0})
+    without = [AnswerRecord(name="interest", type="score", value=3.0, probabilities={"3": 1.0})]
+    with_category = without + [AnswerRecord(name="category", type="choice", value="tooling")]
+
+    assert (
+        aggregate_scores(without, specs, aggregation, penalty_z=0.0).adjusted
+        == aggregate_scores(with_category, specs, aggregation, penalty_z=0.0).adjusted
+    )
+
+
+def test_a_missing_weighted_answer_is_skipped_rather_than_counted_as_zero() -> None:
+    specs = {
+        "interest": QuestionSpec(type="score", criteria=["a"] * 5),
+        "density": QuestionSpec(type="score", criteria=["a"] * 5),
+    }
+    aggregation = AggregationConfig(scale=4.0, weights={"interest": 0.5, "density": 0.5})
+    answers = [AnswerRecord(name="interest", type="score", value=3.0, probabilities={"3": 1.0})]
+
+    result = aggregate_scores(answers, specs, aggregation, penalty_z=0.0)
+
+    assert result is not None
+    assert result.adjusted == pytest.approx(3.0)
+    assert result.components == {"interest": 0.75}
+
+
+def test_an_aggregate_without_any_rankable_answer_is_none() -> None:
+    specs = {"category": QuestionSpec(type="choice", criteria={"x": "y"})}
+    aggregation = AggregationConfig(scale=4.0, weights={"category": 1.0})
+    answers = [AnswerRecord(name="category", type="choice", value="x")]
+
+    assert aggregate_scores(answers, specs, aggregation, penalty_z=1.0) is None
 
 
 # --- cache reading --------------------------------------------------------------------
@@ -287,7 +389,9 @@ def test_only_enriched_items_are_scored(cached_day: Path) -> None:
     plain_item = make_item("2", points=90)
 
     engine = FakeEngine()
-    outcome = triage_day(DAY, [enriched_item, plain_item], TriageConfig(), SPECS, engine=engine)
+    outcome = triage_day(
+        DAY, [enriched_item, plain_item], TriageConfig(), SPECS, AGGREGATION, engine=engine
+    )
 
     assert (outcome.report.candidates, outcome.report.selected) == (1, 1)
     assert len(engine.calls) == 1
@@ -299,13 +403,16 @@ def test_scores_json_records_the_grid_next_to_the_scores(cached_day: Path, tmp_p
     item = make_item()
     write_enriched(cached_day, item, make_enriched(item))
 
-    triage_day(DAY, [item], TriageConfig(min_adjusted_score=1.0), SPECS, engine=FakeEngine())
+    triage_day(
+        DAY, [item], TriageConfig(min_adjusted_score=1.0), SPECS, AGGREGATION, engine=FakeEngine()
+    )
 
     payload = json.loads((tmp_path / "scores.json").read_text(encoding="utf-8"))
     assert payload["settings"]["min_adjusted_score"] == 1.0
     assert payload["settings"]["score_penalty_z"] == 1.0
     assert payload["settings"]["questions"]["interest"]["type"] == "score"
-    assert payload["settings"]["questions"]["interest"]["criteria"] == ["a", "b", "c"]
+    assert payload["settings"]["questions"]["interest"]["criteria"] == ["a", "b", "c", "d", "e"]
+    assert payload["settings"]["aggregation"]["weights"] == {"interest": 1.0}
     assert payload["scores"][0]["answers"][0]["name"] == "interest"
     assert payload["scores"][0]["answers"][0]["value"] == 3.0
 
@@ -315,7 +422,12 @@ def test_an_item_above_the_adjusted_threshold_passes(cached_day: Path) -> None:
     write_enriched(cached_day, item, make_enriched(item))
 
     outcome = triage_day(
-        DAY, [item], TriageConfig(min_adjusted_score=1.0), SPECS, engine=FakeEngine(score=3.0)
+        DAY,
+        [item],
+        TriageConfig(min_adjusted_score=1.0),
+        SPECS,
+        AGGREGATION,
+        engine=FakeEngine(score=3.0),
     )
 
     assert outcome.scores[0].passed is True
@@ -336,6 +448,7 @@ def test_the_downside_penalty_drops_an_uncertain_item(cached_day: Path) -> None:
         [item],
         TriageConfig(min_adjusted_score=1.0, score_penalty_z=1.0),
         SPECS,
+        AGGREGATION,
         engine=FakeEngine(score=2.0, probabilities=split),
     )
 
@@ -355,6 +468,7 @@ def test_a_certain_middle_score_passes_where_a_split_one_fails(cached_day: Path)
         [item],
         TriageConfig(min_adjusted_score=1.0),
         SPECS,
+        AGGREGATION,
         engine=FakeEngine(score=2.0, probabilities=certain),
     )
 
@@ -367,7 +481,9 @@ def test_a_failing_item_is_recorded_and_the_run_continues(cached_day: Path) -> N
     write_enriched(cached_day, first, make_enriched(first))
     write_enriched(cached_day, second, make_enriched(second))
 
-    outcome = triage_day(DAY, [first, second], TriageConfig(), SPECS, engine=FakeEngine(fail=True))
+    outcome = triage_day(
+        DAY, [first, second], TriageConfig(), SPECS, AGGREGATION, engine=FakeEngine(fail=True)
+    )
 
     assert outcome.report.failed == 2
     assert outcome.report.answered == 0
@@ -380,7 +496,7 @@ def test_usage_is_summed_and_the_cost_computed(cached_day: Path) -> None:
         write_enriched(cached_day, item, make_enriched(item))
 
     outcome = triage_day(
-        DAY, items, TriageConfig(price_per_mtok_usd=0.042), SPECS, engine=FakeEngine()
+        DAY, items, TriageConfig(price_per_mtok_usd=0.042), SPECS, AGGREGATION, engine=FakeEngine()
     )
 
     assert outcome.report.input_tokens == 3000
@@ -393,7 +509,13 @@ def test_limit_overrides_the_cap(cached_day: Path) -> None:
         write_enriched(cached_day, item, make_enriched(item))
 
     outcome = triage_day(
-        DAY, items, TriageConfig(max_items=200), SPECS, limit=2, engine=FakeEngine()
+        DAY,
+        items,
+        TriageConfig(max_items=200),
+        SPECS,
+        AGGREGATION,
+        limit=2,
+        engine=FakeEngine(),
     )
 
     assert (outcome.report.candidates, outcome.report.selected) == (4, 2)
@@ -404,7 +526,7 @@ def test_an_injected_engine_is_left_open_for_its_owner(cached_day: Path) -> None
     write_enriched(cached_day, item, make_enriched(item))
     engine = FakeEngine()
 
-    triage_day(DAY, [item], TriageConfig(), SPECS, engine=engine)
+    triage_day(DAY, [item], TriageConfig(), SPECS, AGGREGATION, engine=engine)
 
     assert engine.closed is False
 
@@ -420,6 +542,7 @@ def test_progress_is_reported_once_per_item(cached_day: Path) -> None:
         items,
         TriageConfig(),
         SPECS,
+        AGGREGATION,
         engine=FakeEngine(),
         on_progress=lambda done, total: seen.append((done, total)),
     )

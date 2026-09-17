@@ -107,12 +107,37 @@ def test_shipped_grid_is_valid() -> None:
     assert grid.triage.score_penalty_z == 1.0
     assert grid.triage.min_adjusted_score == 1.0
     assert grid.triage.price_per_mtok_usd == 0.042
-    assert list(grid.questions) == ["interest"]
+    assert grid.triage.max_items == 200
+    assert list(grid.questions) == ["interest", "density", "category", "primary_source"]
+
     interest = grid.questions["interest"]
     assert interest.type == "score"
     assert interest.instructions
     assert isinstance(interest.criteria, list)
     assert len(interest.criteria) == 5
+
+    assert grid.questions["density"].type == "score"
+    assert grid.questions["category"].type == "choice"
+    assert grid.questions["primary_source"].type == "noul"
+
+    # The category is a label for the digest, not a quality signal, so it carries no
+    # weight; the three others do, and they are normalised before use.
+    assert grid.aggregation.weights == {"interest": 0.5, "density": 0.3, "primary_source": 0.2}
+    assert "category" not in grid.aggregation.weights
+    assert grid.aggregation.scale == 4.0
+    assert sum(grid.aggregation.normalised().values()) == pytest.approx(1.0)
+
+
+def test_a_weight_naming_an_unknown_question_is_rejected(tmp_path: Path) -> None:
+    """A typo there would silently drop a question from the ranking."""
+    custom = tmp_path / "questions.toml"
+    custom.write_text(
+        '[questions.interest]\ntype = "score"\ncriteria = ["a", "b"]\n'
+        "\n[aggregation.weights]\ninterst = 1.0\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="unknown questions"):
+        load_questions_config(custom)
 
 
 def test_a_choice_question_is_parsed(tmp_path: Path) -> None:

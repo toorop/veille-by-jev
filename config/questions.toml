@@ -52,3 +52,52 @@ criteria = [
   "Important: a technique or a tool that changes daily practice",
   "Essential: a major release, a foundational paper, or a shift in the field",
 ]
+
+# A second `Score`: how much there is to learn, from research paper to pure announcement.
+[questions.density]
+type = "score"
+instructions = "Technical density: does this teach something, or does it announce something?"
+criteria = [
+  "Pure marketing: an announcement with nothing to learn from",
+  "Shallow: a short post or a release note, no implementation detail",
+  "Concrete: some detail, a benchmark, or a real example",
+  "Deep: a technique explained well enough to be reused",
+  "Research-grade: a paper, a specification, or an architecture worth studying",
+]
+
+# A `Choice`: recorded as a label for the digest. It is deliberately absent from the
+# weights table below, because a category is not a quality signal.
+[questions.category]
+type = "choice"
+instructions = "Which category does this item belong to?"
+
+[questions.category.criteria]
+research = "A paper, a benchmark, or a method"
+tooling = "A tool, a library, a framework, or a way of working"
+hardware = "Chips, machines, or infrastructure"
+industry = "Companies, funding, or strategy"
+society = "Policy, law, ethics, or social impact"
+
+# A `Noul`: yes or no as a probability, with no separate confidence field.
+[questions.primary_source]
+type = "noul"
+instructions = "Is this a primary source — a paper, an official announcement, or a code repository — rather than a report about one?"
+
+[aggregation]
+# The aggregate is expressed on this scale, matching the level scale of a five-level
+# `Score`, so that `min_adjusted_score` keeps the meaning it was calibrated with: 1.0 is
+# "still at least marginal once the downside is subtracted".
+scale = 4.0
+
+# Weight of each question in the aggregate. Weights are relative and get normalised, so
+# they only have to express importance. A question with no weight here is still recorded
+# and still costs its tokens, it just does not rank — which is the case for the category.
+#
+# The example formula in the scoping notes mixed scales: two positions on 0–4 and a
+# probability on 0–1. Read literally it gave the primary-source signal a real weight of
+# 5% where it looked like 20%. Each component is therefore normalised to [0, 1] before
+# weighting; the downside penalty applies to each component's own distribution.
+[aggregation.weights]
+interest = 0.5
+density = 0.3
+primary_source = 0.2

@@ -220,6 +220,79 @@ value can flip between runs.
 - **Filtering on the confidence scalar alone**, which the scoping notes prescribed. The
   measurement above is what refuted it. The confidence is still recorded, as a diagnostic.
 
+## 2026-09-17 — stage 4: the full grid and the weighted aggregation
+
+### What was built
+
+The grid now holds the four questions the scoping notes proposed, and they are combined in
+code:
+
+| Question | Type | Weight | Role |
+| --- | --- | --- | --- |
+| `interest` | Score, 5 levels | 0.5 | the main signal |
+| `density` | Score, 5 levels | 0.3 | from research paper to pure announcement |
+| `primary_source` | Noul | 0.2 | a paper or an official announcement, not a report about one |
+| `category` | Choice, 5 options | none | a label for the digest, not a quality signal |
+
+Weights live in an `[aggregation]` table, are normalised before use, and a weight naming an
+unknown question is rejected at load time: a typo there would silently drop a question from
+the ranking.
+
+### A defect in the notes' aggregation formula, fixed
+
+The notes proposed `0.5 × interest + 0.3 × density + 0.2 × primary`, mixing a position on 0–4
+with a probability on 0–1. Read literally, that gives the primary-source signal a real weight
+of 5 % where it looks like 20 %. Every component is now normalised to [0, 1] before weighting,
+and the aggregate is expressed back on the level scale so that `min_adjusted_score` keeps the
+meaning it was calibrated with. On a worked example — an essential, shallow, primary item — the
+note's formula gives 2.2 and the corrected one 2.8; a test locks that in.
+
+### What the real run measured (same five items)
+
+| Quantity | One question | Four questions |
+| --- | --- | --- |
+| Input tokens | 12,016 | 13,376 (+11 %) |
+| Output tokens | 85 | 493 |
+| Latency | 2.9 s | 2.6 s |
+| Cost | USD 0.000505 | USD 0.000562 |
+
+The three extra questions cost about a tenth more input, which matches the API's design: the
+state is ingested once and the questions themselves are small.
+
+### What the full grid changed in the ranking
+
+| Item | `interest` alone | Weighted aggregate | Category |
+| --- | --- | --- | --- |
+| Nvidia announces native GPU programming in Rust | 2.08 | 2.38 | tooling |
+| Training a 4B model for faster query plans | 1.62 | 1.61 | research |
+| Mistral X Mozilla | 1.55 | 1.49 | industry |
+| Small programming tricks | 1.53 | 1.38 | tooling |
+| EU chief opens door for Canada | −0.22 | 0.07 | society |
+
+Two things changed beyond noise. Training and Mistral swap: Mistral is a primary source (0.82)
+but thin (density 0.05), while Training is the opposite (0.17 and 0.55). And the political story
+is pulled up by the scale change — its aggregate is near zero rather than negative, since a
+`Noul` cannot contribute a negative component — which is exactly why the admission floor has to
+be re-calibrated on a real batch rather than on five items.
+
+### Decisions taken at this stage
+
+- **The category carries no weight.** It is a label the digest will use to group items; a
+  category is not a quality signal, and weighting it would smuggle a judgement into the ranking.
+- **A missing weighted answer is skipped, not counted as zero.** With one call carrying every
+  question, an absent answer is an anomaly, and scoring it as "no interest" would be a silent
+  lie.
+- **The aggregate is discrete arithmetic over normalised components**, so the whole ranking can
+  be recomputed from `scores.json` without calling the engine again. Every component is written
+  next to the raw answers.
+
+### What was rejected
+
+- **Keeping the notes' formula as written**, which would have under-weighted the primary-source
+  signal by a factor of four.
+- **Weighting the category**, which would have made the digest's section labels influence the
+  selection.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -236,6 +309,7 @@ stages not yet written.
 | Character-based estimate against the invoice | — | a factor of 1.22 | 2026-09-17 |
 | Duration of enrichment | not estimated | 80 s for 20 items, about 13 min extrapolated for 200 | 2026-09-17 |
 | Latency of one triage call | 70 to 500 ms announced | about 0.6 s | 2026-09-17 |
+| Input tokens per item, four questions | — | 2,675, against 2,403 with one question | 2026-09-17 |
 | Triage cost per month | USD 0.38 | USD 0.61 at 200 items per night | 2026-09-17 |
 | Writing cost per month | not quantified | — | — |
 | Total duration of the nightly run | not estimated | — | — |
@@ -245,7 +319,7 @@ stages not yet written.
 - [x] `collect` operational on a real day
 - [x] `enrich` operational, with cache and failure tolerance
 - [x] `triage` operational with a single question
-- [ ] full grid and coefficients in `config/questions.toml`
+- [x] full grid and coefficients in `config/questions.toml`
 - [ ] `write` operational, digest in French
 - [ ] first digest read all the way through by Stéphane
 - [ ] real cost measured and reported in [TypeSafe triage](typesafe-triage.md)
@@ -266,4 +340,6 @@ stages not yet written.
 | 2026-09-17 | 2,000-token ceiling, 200-token floor for article text | At 1,200 the median article was cut for nothing; at the other end a 10-token extraction was called an article |
 | 2026-09-17 | Five first top-level comments, inserted order | The value is often in the thread; the API order is honest but not sorted by score |
 | 2026-09-17 | Grid written in English, French reserved for the digest | The engine reads the grid; no human does |
-| 2026-09-17 | Confidence threshold lowered from 0.6 to 0.50 | On a five-level scale, 0.6 discarded the day's best-scored item at a confidence of exactly 0.500 |
+| 2026-09-17 | Confidence threshold lowered from 0.6 to 0.50, then dropped entirely | On a five-level scale, 0.6 discarded the day's best-scored item at a confidence of exactly 0.500; the lower-bound ranking then replaced the filter |
+| 2026-09-17 | Components normalised to [0, 1] before weighting | The notes' formula mixed a position on 0-4 with a probability on 0-1, deflating the primary-source weight from 20 % to 5 % |
+| 2026-09-17 | Category recorded but not weighted | A category is a label for the digest, not a quality signal |

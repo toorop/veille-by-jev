@@ -17,13 +17,14 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
 from pydantic import ValidationError
 
 from veille.clients.typesafe import TypeSafeEngine
-from veille.config import QuestionSpec, TriageConfig
+from veille.config import AggregationConfig, QuestionSpec, TriageConfig
 from veille.models import (
     AnswerRecord,
     EngineAnswer,
@@ -138,33 +139,111 @@ def level_spread(probabilities: Mapping[str, float]) -> float | None:
     return math.sqrt(variance)
 
 
-def rank_value(
-    answers: Iterable[AnswerRecord], penalty_z: float
-) -> tuple[float | None, float | None]:
-    """Return the provisional ranking value of an item, and the spread behind it.
+@dataclass(frozen=True)
+class Aggregate:
+    """The weighted judgement of one item.
 
-    The value is `score - penalty_z × spread`: a lower bound on the position rather than
-    the position itself. An item hesitating between two neighbouring levels loses little;
-    one hesitating between "no interest" and "essential" loses a lot. With a single score
-    question this is unambiguous; the weighted aggregation of stage 4 will replace it, and
-    the raw answers stay in the record either way, so another rule can be computed later
-    without calling the engine again.
+    Attributes:
+        adjusted: Weighted lower bound, on the configured scale.
+        spread: Weighted downside spread, on the same scale.
+        components: Normalised adjusted value contributed by each weighted question.
+    """
+
+    adjusted: float
+    spread: float
+    components: dict[str, float]
+
+
+def _score_component(
+    answer: AnswerRecord, spec: QuestionSpec, penalty_z: float
+) -> tuple[float, float] | None:
+    """Normalise one `Score` answer to [0, 1], penalty included.
+
+    Returns:
+        The adjusted value and the spread, both in [0, 1], or `None` when the answer cannot
+        be placed on a scale.
+    """
+    if not isinstance(answer.value, float) or not isinstance(spec.criteria, list):
+        return None
+    top = len(spec.criteria) - 1
+    if top <= 0:
+        return None
+    spread = level_spread(answer.probabilities) or 0.0
+    return (answer.value - penalty_z * spread) / top, spread / top
+
+
+def component_value(
+    answer: AnswerRecord, spec: QuestionSpec, penalty_z: float
+) -> tuple[float, float] | None:
+    """Return the normalised value of one answer and its normalised spread.
+
+    Components are normalised to [0, 1] before weighting, so that the weights mean what
+    they say: the scoping notes' example formula added a position on 0–4 to a probability
+    on 0–1, which silently deflated the primary-source signal.
+
+    A `noul` is already a probability, so it is used as is: its uncertainty is inside the
+    number itself, and the engine returns no distribution for it.
+
+    Args:
+        answer: One normalised engine answer.
+        spec: The question it answers.
+        penalty_z: Standard deviations of downside to subtract, for score answers.
+
+    Returns:
+        The adjusted value and its spread, both in [0, 1]; `None` for an answer that does
+        not rank, such as a `choice`.
+    """
+    if answer.type == "score":
+        return _score_component(answer, spec, penalty_z)
+    if answer.type == "noul" and isinstance(answer.value, float):
+        return answer.value, 0.0
+    return None
+
+
+def aggregate_scores(
+    answers: Iterable[AnswerRecord],
+    specs: Mapping[str, QuestionSpec],
+    aggregation: AggregationConfig,
+    penalty_z: float,
+) -> Aggregate | None:
+    """Combine the weighted answers into one ranking value.
 
     Args:
         answers: The engine answers, in grid order.
-        penalty_z: Standard deviations of downside to subtract.
+        specs: The grid, for the level counts each question uses.
+        aggregation: Weights and scale from the configuration.
+        penalty_z: Standard deviations of downside to subtract, per component.
 
     Returns:
-        The adjusted value and the spread, both `None` when no score answer is usable.
+        The aggregate, or `None` when no weighted answer could be ranked.
     """
-    answer = next((item for item in answers if item.type == "score"), None)
-    if answer is None or not isinstance(answer.value, float):
-        return None, None
+    by_name = {answer.name: answer for answer in answers}
+    components: dict[str, float] = {}
+    weighted_value = 0.0
+    weighted_spread = 0.0
+    total_weight = 0.0
 
-    spread = level_spread(answer.probabilities)
-    if spread is None:
-        return answer.value, None
-    return answer.value - penalty_z * spread, spread
+    for name, weight in aggregation.normalised().items():
+        answer = by_name.get(name)
+        spec = specs.get(name)
+        if answer is None or spec is None:
+            continue
+        component = component_value(answer, spec, penalty_z)
+        if component is None:
+            continue
+        value, spread = component
+        components[name] = round(value, 4)
+        weighted_value += weight * value
+        weighted_spread += weight * spread
+        total_weight += weight
+
+    if total_weight <= 0:
+        return None
+    return Aggregate(
+        adjusted=round(weighted_value / total_weight * aggregation.scale, 4),
+        spread=round(weighted_spread / total_weight * aggregation.scale, 4),
+        components=components,
+    )
 
 
 def load_enriched(day: date, item: Item) -> EnrichedItem | None:
@@ -187,6 +266,8 @@ def _score_one(
     item: Item,
     enriched: EnrichedItem | None,
     cfg: TriageConfig,
+    specs: Mapping[str, QuestionSpec],
+    aggregation: AggregationConfig,
     now: datetime,
 ) -> tuple[ItemScore, TriageUsage]:
     """Ask the engine about one item, turning any failure into a recorded state.
@@ -210,15 +291,16 @@ def _score_one(
     if result.error is not None:
         return ItemScore(**identity, error=result.error), result.usage
 
-    adjusted, spread = rank_value(result.answers, cfg.score_penalty_z)
-    passed = adjusted is not None and adjusted >= cfg.min_adjusted_score
+    aggregate = aggregate_scores(result.answers, specs, aggregation, cfg.score_penalty_z)
+    passed = aggregate is not None and aggregate.adjusted >= cfg.min_adjusted_score
     return (
         ItemScore(
             **identity,
             answers=result.answers,
             confidence=weakest_confidence(result.answers),
-            adjusted=adjusted,
-            spread=spread,
+            adjusted=None if aggregate is None else aggregate.adjusted,
+            spread=None if aggregate is None else aggregate.spread,
+            components={} if aggregate is None else aggregate.components,
             passed=passed,
         ),
         result.usage,
@@ -230,6 +312,7 @@ def triage_day(
     items: Iterable[Item],
     cfg: TriageConfig,
     specs: Mapping[str, QuestionSpec],
+    aggregation: AggregationConfig,
     *,
     limit: int | None = None,
     engine: Engine | None = None,
@@ -246,6 +329,7 @@ def triage_day(
         items: Candidates, already sorted by descending score.
         cfg: Provider settings from the grid file.
         specs: The questions, in the order they should be reported.
+        aggregation: Weights and scale used to combine the answers.
         limit: Overrides `cfg.max_items`, for development runs.
         engine: Injected engine; otherwise a real Jev engine is built, which validates the
             API key before the first item.
@@ -268,7 +352,9 @@ def triage_day(
 
     try:
         for done, item in enumerate(selected, start=1):
-            score, usage = _score_one(active, item, load_enriched(day, item), cfg, now)
+            score, usage = _score_one(
+                active, item, load_enriched(day, item), cfg, specs, aggregation, now
+            )
             scores.append(score)
             if score.error is None:
                 report.answered += 1
@@ -296,6 +382,10 @@ def triage_day(
             "score_penalty_z": cfg.score_penalty_z,
             "min_adjusted_score": cfg.min_adjusted_score,
             "price_per_mtok_usd": cfg.price_per_mtok_usd,
+            "aggregation": {
+                "scale": aggregation.scale,
+                "weights": aggregation.weights,
+            },
             "questions": {name: spec.model_dump(mode="json") for name, spec in specs.items()},
         },
         "stats": report.model_dump(mode="json"),

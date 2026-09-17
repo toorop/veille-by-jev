@@ -48,22 +48,33 @@ What the ranker receives for one item — kept short, since only the input is bi
 | `Choice` | Category: research, tooling, hardware, industry, society | chosen option + probability per option |
 | `Noul` | Is this a primary source (paper, official announcement, code)? | value between 0 and 1 |
 
-Those four entries are **shape examples**, not the final grid: the descriptive scale, the
-thresholds and the weights remain to be written and iterated. The grid is tuned in
-`config/questions.toml`, never in code.
+Those four entries are implemented as written, and they can be replaced or extended without
+touching code: the grid is tuned in `config/questions.toml`. The weights in force are `interest`
+0.5, `density` 0.3 and `primary_source` 0.2; the `category` carries none, being a label for the
+digest rather than a quality signal. The descriptive scales are written in English, because the
+engine is the one reading them.
 
 ## Combination in code
 
 The answers are aggregated by an explicit formula, with readable and editable coefficients:
 
 ```python
-def score_item(answers: dict) -> float:
-    """Aggregate the typed answers of one item into a single weighted score."""
-    interest = answers["interest"]["score"]
-    density = answers["density"]["score"]
-    primary = answers["primary_source"]["noul"]
-    return (0.5 * interest) + (0.3 * density) + (0.2 * primary)
+def item_aggregate(answers, specs, aggregation, penalty_z) -> float:
+    """Aggregate the typed answers into one ranking value, on the configured scale."""
+    total = 0.0
+    for name, weight in aggregation.normalised().items():
+        value, _spread = component_value(answers[name], specs[name], penalty_z)
+        total += weight * value
+    return total * aggregation.scale
 ```
+
+Every component is normalised to [0, 1] before weighting — a `Score` by its level count, a
+`Noul` as is — and the aggregate is then expressed on the level scale. The scoping notes'
+original formula added a position on 0–4 to a probability on 0–1, which gave the primary-source
+signal a real weight of 5 % where it looked like 20 %. The weights are relative and normalised,
+so they only have to express importance, and a question left out of them is recorded without
+ranking: that is the case for the category, which is a label for the digest rather than a
+quality signal.
 
 Two rules attached to that aggregation:
 
