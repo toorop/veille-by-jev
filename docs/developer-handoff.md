@@ -98,6 +98,11 @@ changing it must never require touching code.
 - a dated title;
 - for each kept item: original title, source, link, two to four sentences of summary **in
   French**, and a "why this one" line;
+- **written for a non-specialist.** The batch is technical by nature, but the digest must not
+  require an expert to be understood: an item says what the thing is before saying why it
+  matters, jargon is unpacked rather than repeated, and no sentence assumes the reader knows
+  the field. The digest is meant to be listened to later, so a sentence that has to be read
+  twice is a defect, not a detail;
 - at the end, a section of the dropped items with their score, to make the ranking
   contestable;
 - at the end, the cost of the run: number of input tokens and estimated cost.

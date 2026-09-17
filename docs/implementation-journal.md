@@ -411,3 +411,5 @@ stages not yet written.
 | 2026-09-17 | Category recorded but not weighted | A category is a label for the digest, not a quality signal |
 | 2026-09-17 | Admission floor 2.0, digest of 8 items | At 1.0 a night kept 61 items, too many to read; the floor guarantees a minimum quality, the size caps the volume |
 | 2026-09-17 | The floor is re-applied downstream, not baked in | The aggregate is stored per item, so changing the floor costs no new call |
+| 2026-09-17 | The digest must be readable by a non-specialist | A technical batch does not excuse an unreadable digest; it is to be listened to, so a sentence that needs re-reading is a defect. This belongs in the system prompt |
+| 2026-09-17 | Writer model chosen through OpenRouter, on a measured comparison | The cost range from cheap open models to frontier ones is under two dollars a month, so price does not settle it; three candidates will be run on the same stored batch and read |

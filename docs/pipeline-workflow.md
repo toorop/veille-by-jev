@@ -75,6 +75,9 @@ Three reasons:
   of summary **in French**, and a "why this one" line. At the end, the list of dropped items
   with their score, to keep a trace of what was rejected and make the ranking contestable.
 - Writing happens **directly in French** from English sources, with no translation step.
+- **Written for a non-specialist.** Each item says what the thing is before saying why it
+  matters, and unpacked jargon rather than repeated jargon. The digest is meant to be
+  listened to later, so a sentence that must be read twice is a defect.
 
 ### 5. What comes next (V3, outside V1)
 
