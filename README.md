@@ -1,38 +1,15 @@
 # veille-by-jev
 
-## Objective
+**A nightly technology watch, triaged by a decision model and written up as a French digest.**
 
-Turn an endured technology watch (scrolling Hacker News, Reddit, arXiv) into a watch you
-**listen to**: an agent collects, ranks and writes a nightly summary, in French, meant to
-become a short two-voice audio episode later on.
-
-Two goals, in this order:
-
-1. **Learn curation** — collect widely, score, deduplicate, keep only what deserves attention.
-2. **Learn the text → voice chain** — but only once the text deliverable is good.
-
-## Guiding rule
-
-> Voice is 10% of the project. Curation is 90%. If the digest is bad, the podcast will be bad.
-
-Operational consequence: the first deliverable is a Markdown file that Stéphane reads and
-judges in three minutes. TTS is added only after the digest's quality is validated.
-
-## Scope
-
-| Phase | Content | Status |
-| --- | --- | --- |
-| V1 | Hacker News → Markdown digest (collect, enrich, triage, write) | in progress — `collect` operational, three stages to go |
-| V2 | Reddit over RSS, arXiv, cross-day deduplication | planned |
-| V3 | Two-voice script, local TTS, podcast RSS feed | planned |
-
-Explicitly out of scope: email or calendar notifications, voice cloning, web application,
-user accounts, automatic publishing to a platform.
-
-## Target architecture
+Every night, `veille-by-jev` pulls the day's Hacker News stories, fetches and extracts the
+articles, scores them against a grid of typed questions, and writes an eight-item Markdown
+digest in French. The point is the filter, not the volume: 200 candidates become 8 things worth
+reading, each summarised in plain French, with the ones that were set aside still listed and
+scored so the ranking can be contested.
 
 ```text
-  sources                   pipeline (one command per stage, files as the interface)
+  sources                    pipeline — one command per stage, files as the interface
   ┌──────────┐    ┌──────────┐   ┌──────────┐   ┌────────────┐   ┌──────────┐
   │ HN       │───▶│ collect  │──▶│  enrich  │──▶│   triage   │──▶│  write   │──▶ digest.md
   │ (Algolia)│    │ items.json│   │ enriched/│   │ Jev + code │   │  (LLM)   │
@@ -43,98 +20,301 @@ user accounts, automatic publishing to a platform.
 Triage is the only stage that makes a **judgement**; writing is the only stage that produces
 **text**; collection and enrichment are deliberately dumb and verifiable.
 
-## Navigation
+## Why this exists
 
-- [Pipeline workflow](docs/pipeline-workflow.md) — the five stages, their inputs/outputs and the invariants.
-- [TypeSafe triage](docs/typesafe-triage.md) — state definition, typed questions, weights, costs.
-- [Developer handoff](docs/developer-handoff.md) — executable brief for the development agent.
-- [Implementation journal](docs/implementation-journal.md) — timeline, measurements, decisions, checklist.
-- [Renaming the folder](docs/renaming-the-folder.md) — one-off procedure to align the local folder with the project name.
-- [Original development brief](docs/prompt.md) — the prompt the project was started from, kept as a record.
+Reading Hacker News every day is a chore, and the interesting part is not the reading: it is
+deciding what deserves attention.
 
-The documentation is in English too. The only French output is the digest itself, which is the
-point of the project.
+> Voice is 10% of the project. Curation is 90%. If the digest is bad, the podcast will be bad.
 
-## Decisions
+So the first deliverable is a Markdown file you read in three minutes, and a text-to-speech
+stage is planned only once the text is worth listening to. Two goals, in that order: learn
+curation, then learn the text-to-voice chain.
+
+## Requirements
+
+- Linux, **Python 3.11 or later**, and [uv](https://docs.astral.sh/uv/) for the environment.
+- A **TypeSafe (Jev)** key for the triage, from <https://console.typesafe.ai/settings/keys>.
+  Jev is a closed beta launched on 2026-09-15; it evaluates typed questions without generating
+  text, which is why the ranking is cheap and cannot produce malformed JSON.
+- An **OpenRouter** key for the writing, from <https://openrouter.ai/keys>. Any
+  OpenAI-compatible endpoint works instead: the base URL is a line of `config/write.toml`.
+
+The GPU is not used, and nothing else is installed globally.
+
+## Install
+
+```bash
+git clone https://github.com/toorop/veille-by-jev.git
+cd veille-by-jev
+cp .env.example .env     # then fill in the two keys
+uv sync
+uv run vbj --version
+```
+
+`.env` is ignored by git and read at startup by the pipeline itself. Only secrets belong there:
+the writer model, its endpoint and the digest size live in `config/`. A variable already
+exported in your shell wins over the file, so `TYPESAFE_LOG_LEVEL=DEBUG uv run vbj triage …`
+overrides it for one run.
+
+## Use
+
+Four commands, one per stage, each taking a civil day. Files are the interface between them, so
+any stage can be replayed alone for a given date.
+
+| Command | Reads | Writes | Calls a model |
+| --- | --- | --- | --- |
+| `vbj collect --date D` | `config/sources.toml` | `data/D/items.json` | no |
+| `vbj enrich --date D` | `items.json` | `data/D/enriched/<hash>.json` | no |
+| `vbj triage --date D` | `items.json`, `enriched/`, `config/questions.toml` | `data/D/scores.json` | Jev |
+| `vbj write --date D` | the admitted items of `scores.json` | `digest/D.md` | OpenRouter |
+
+A full night, as run for 2026-09-16:
+
+```bash
+uv run vbj collect --date 2026-09-16   # 1,000 stories, 984 candidates, 1 request, 0.9 s, free
+uv run vbj enrich  --date 2026-09-16   # 200 articles fetched, 166 with usable text, 2 min 31 s
+uv run vbj triage  --date 2026-09-16   # 200 items scored, 14 clear the floor, 88 s, USD 0.0167
+uv run vbj write   --date 2026-09-16   # 8 items written up, 67 s, USD 0.1208
+```
+
+Each command prints what it did, and what it cost. The last one:
+
+```text
+$ uv run vbj write --date 2026-09-16
+vbj write --date 2026-09-16
+  selection  : 8 written up, 192 set aside, out of 200 triaged (floor 2.0)
+  model      : anthropic/claude-sonnet-5 — 24242 input, 7230 output, 66.82 s
+  cost       : USD 0.120784
+  written    : digest/2026-09-16.md (24878 bytes)
+```
+
+**Replaying is safe and free.** A stage whose output already exists does nothing and spends
+nothing; `--force` makes it run again. `enrich` and `triage` also take `--limit N` to try a
+handful of items, and `write` takes `--model` and `--output` to compare two writers on the same
+night without overwriting the digest.
+
+### What the digest looks like
+
+```markdown
+# Veille du 16 septembre 2026
+
+**8 items retenus** sur 200 candidats triés. Seuil d'admission : 2,0.
+
+## Accurate Models of AMD Matrix Cores
+
+- **Source** : Hacker News — 75 points, 9 commentaires
+- **Lien** : <https://arxiv.org/abs/2609.14845>
+- **Catégorie** : recherche
+- **Scores** : interest 2,3 · density 4,0 · primary_source 0,9 · agrégat 2,62
+
+Les multiplicateurs de matrices intégrés aux GPU (les circuits qui accélèrent les
+multiplications de grandes grilles de nombres) ne suivent pas la norme de calcul flottant
+IEEE 754, et leur comportement diffère selon le fabricant et même selon l'architecture d'un
+même fabricant. […] Les auteurs ont construit des modèles logiciels précis au bit pour trois
+architectures AMD (CDNA 1, 2 et 3, utilisées par les GPU MI100, MI210/250 et MI300), validés
+sur dix millions de cas de test, puis s'en sont servis pour mesurer les écarts de précision
+entre les cœurs matriciels d'AMD et les tensor cores de Nvidia.
+
+**Pourquoi celui-là.** Utile si vous cherchez à comprendre pourquoi un calcul d'IA donne des
+résultats légèrement différents selon le GPU utilisé.
+```
+
+The digest is written for a reader who is interested in the field but **not a specialist**: an
+item says what the thing is before saying why it matters, and jargon is unpacked rather than
+repeated. That requirement lives in `config/write-prompt.md`, not in the code, so it can be
+tightened without touching anything else.
+
+Each kept item carries its source, link, category, the scores behind the decision, a two-to-four-sentence summary and a "why this one" line.
+four-sentence summary and a "why this one" line. The eight items are followed by the ones that
+were set aside with their score — 192 rows on that night — and by the cost of the run.
+
+## Cost
+
+Measured on the 2026-09-16 batch, not estimated:
+
+| Stage | Per night | Per month |
+| --- | --- | --- |
+| `collect` | free | free |
+| `enrich` (718 HTTP requests, 2.5 min) | free | free |
+| `triage` — Jev, 200 items, input only | USD 0.0167 | USD 0.50 |
+| `write` — Claude Sonnet 5 | USD 0.1208 | USD 3.62 |
+| **total** | **USD 0.14** | **USD 4.12** |
+
+The writer costs seven times the triage. If that matters more than prose quality, swapping it is
+one line of `config/write.toml`: the three models compared on that same night, and their
+measured cost, are listed there — the cheapest brings the writer down to USD 0.03 per month.
+
+Costs are printed by the stages themselves and measured by the provider, never estimated:
+OpenRouter reports the real cost of the call, and Jev reports the input tokens it billed.
+
+## Configuration
+
+No code has to change to retune the watch:
+
+| File | What it holds |
+| --- | --- |
+| `config/sources.toml` | enabled sources, the time window and its timezone, the score floor, the enrichment budget |
+| `config/questions.toml` | the grid: typed questions, their descriptive levels, the admission floor, the weights |
+| `config/write.toml` | the writer model, the digest size, its temperature and output ceiling |
+| `config/write-prompt.md` | the writer's system prompt, including the readability requirement |
+
+**The grid is the file that decides what the digest keeps.** A question is a `score` (an ordered
+spectrum, level by level), a `choice` (a label), or a `noul` (a yes/no as a probability):
+
+```toml
+[questions.interest]
+type = "score"
+instructions = "Interest for a French-speaking developer who follows applied AI and local tooling."
+criteria = [
+  "No interest: marketing, fundraising, or a topic outside the field",
+  # … level 2, level 3 …
+  "Essential: a major release, a foundational paper, or a shift in the field",
+]
+
+[aggregation.weights]
+interest = 0.5
+density = 0.3
+primary_source = 0.2
+```
+
+An item is ranked on `score − z × spread`, a lower bound on its position rather than the position
+itself: hesitating between two neighbouring levels costs little, hesitating between "no interest"
+and "essential" costs a lot. A question left out of the weights is recorded but does not rank —
+that is how the category stays a label rather than a quality signal. A weight naming an unknown
+question is refused when the file loads, because a typo there would silently drop a question
+from the ranking.
+
+Every choice is recorded in `scores.json` next to the raw answers and the grid that produced
+them, so a ranking can be recomputed — or contested — without calling the engine again.
+
+## How it is built
+
+Four invariants hold the pipeline together:
+
+- **Files are the interface.** No service, no database, no state in memory between runs. You can
+  replay the triage after editing the grid, inspect any intermediate file, or diff two days.
+- **Replaying costs nothing.** Without `--force`, a stage whose output exists does nothing at
+  all. That matters most at the paid stages.
+- **The model writes prose, never figures.** The dated title, the links, the sources, the scores,
+  the set-aside table and the cost line are generated from the data, so the writer can neither
+  misquote a figure nor forget a link. It answers in JSON keyed by item id, and a malformed
+  answer becomes a reserve written into the digest instead of a broken file.
+- **Failure is a state, not an exception.** An article that cannot be fetched or extracted
+  becomes a metadata-only item and the stage carries on: 34 of the 200 candidates on that night.
+  A source that fails is reported in the output file, not thrown.
+
+## Development
+
+```bash
+uv run pytest          # 156 tests
+uv run ruff check .    # lint
+uv run ruff format .   # formatting
+```
+
+The HTTP layer is monkeypatched and the engines are injected, so the suite runs in under a second,
+needs no keys, and touches neither the network nor a provider. Adding a question to the grid needs
+no test change; adding a question *type* does.
+
+## Project layout
+
+```text
+veille-by-jev/
+  README.md
+  docs/                       # scoping notes, in French
+  pyproject.toml
+  .env.example                # variable names, never values
+  config/
+    sources.toml              # sources, window, score floor, enrichment budget
+    questions.toml            # the grid: questions, levels, floor, weights
+    write.toml                # writer model, digest size, labels
+    write-prompt.md           # writer system prompt, including readability
+  veille/
+    cli.py                    # collect / enrich / triage / write
+    config.py                 # TOML reading, window computation
+    models.py                 # contract between stages, deduplication rule
+    store.py                  # data/ layout, fingerprints, atomic writes
+    sources/hn.py             # Hacker News collection
+    enrich.py                 # fetching, extraction, truncation, comments, cache
+    triage.py                 # state building, ranking, confidence
+    write.py                  # digest assembly from the model's prose
+    clients/typesafe.py       # Jev adapter (replaceable)
+    clients/openrouter.py     # writer adapter (OpenAI-compatible, replaceable)
+  tests/
+  data/<date>/                # generated, ignored by git
+  digest/<date>.md            # generated, ignored by git
+```
+
+## Status and limits
+
+**V1 is complete**: the four stages run end to end, and a first digest exists
+(`digest/2026-09-16.md`). The acceptance criterion is human and still open: the digest has to be
+read all the way through, and only then are the grid and the writer worth tuning.
+
+Honest limits, all measured rather than assumed:
+
+- **The engine is not deterministic.** Two runs over the same five items moved scores by up to
+  0.05, so `--force` does not reproduce a ranking exactly. Idempotence protects the file and the
+  money, not the bit-for-bit reproducibility of a judgement.
+- **Coverage is partial.** Algolia caps pagination at 1,000 hits: 1,139 stories were published on
+  2026-09-16 and 1,000 were reachable. The oldest of a busy day stay out of reach, which does not
+  matter for a ranking that keeps the best scores.
+- **Extraction fails on 17% of articles** (JavaScript shells, status pages, social posts). Those
+  items are judged on their title and metadata alone, and the digest says so.
+- **Every figure comes from one night.** A weekday, a weekend and a news-heavy day would make the
+  costs and timings solid.
+- **The token estimate used to bound the state** understates the triage invoice by a measured
+  factor of 1.22.
+
+## Roadmap
+
+| Phase | Content | Status |
+| --- | --- | --- |
+| V1 | Hacker News → Markdown digest (`collect`, `enrich`, `triage`, `write`) | done |
+| V2 | Reddit over RSS, arXiv, cross-day deduplication, feedback on what was read | planned |
+| V3 | Two-voice script, local TTS, podcast RSS feed | planned |
+
+Explicitly out of scope: email or calendar notifications, voice cloning, web application, user
+accounts, automatic publishing to a platform.
+
+## Decisions worth knowing
 
 | Decision | Rejected alternative | Reason |
 | --- | --- | --- |
-| Text deliverable first, voice later | Audio episode right away | A bad digest must be caught by reading, not by listening for 15 minutes |
-| Output written in French from English sources | Translate, then read | One step fewer, no cascading loss of nuance |
-| Triage engine = Jev (TypeSafe) | Classic generative LLM | Typed output with no generated text: no malformed JSON, no paid retries, free output |
-| Questions and weights in a config file | Instructions inside a prompt | The grid becomes weighted and editable without rewriting a prompt |
-| Replayable CLI stages, files as the interface | Long-running service or database | Replay triage without refetching, inspect intermediate state, diff two days |
-| Python | Rust | Rust would buy a few milliseconds on a nightly job; the ecosystem (TypeSafe SDK, HTML extraction, TTS) is Python-first |
-| Local TTS (Piper or Kokoro) in V3 | Cloud TTS API | No cloning needed: local is enough for French, with no data leaving the machine and no billing |
-| `tts-serve` rejected | Use it as the engine layer | Its value is cloning and multiple engines; without cloning it is a needless dependency |
-| Civil-day window in a configurable timezone | Rolling 24 h back from run time | The same `--date` always yields the same batch, whatever time the run happens; a nightly cron passing yesterday's date covers a whole Hacker News day |
-| `items.json` keeps every candidate, uncapped | Truncate to the digest size at collection | Collection costs a single request, so the snapshot is free; the cap belongs to the stage that pays for it |
-| English code, CLI and configuration; French digest only | French throughout | The repository is public; the digest is French because its reader is |
-| Extraction in plain text, with a floor under which an item is metadata-only | Keep the HTML, or accept any extracted text | Markup has no semantic value and would eat the token budget, which is the cost lever of triage; a 10-token extraction from a JavaScript shell is not an article |
-| Lower-bound ranking, `score − z × spread` | Filter on the confidence scalar, as the scoping notes prescribed | Measured on the first real run: filtering on confidence alone ranked backwards, discarding the day's best-scored story because the engine hesitated between two high, neighbouring levels while being certain about a merely average one |
+| Text deliverable first, voice later | Audio episode right away | A bad digest is caught by reading, not by listening for 15 minutes |
+| Written in French from English sources | Translate, then read | One step fewer, no cascading loss of nuance |
+| Jev, a decision model, for the triage | A generative LLM | Typed answers by construction: no malformed JSON, no paid retries, output free |
+| Lower-bound ranking, `score − z × spread` | Filter on the confidence scalar | Measured: filtering on confidence alone ranked backwards, discarding the day's best-scored story because the engine hesitated between two high, neighbouring levels |
+| Files as the interface, replayable stages | A service, or a database | Replay the triage without refetching, inspect the intermediate state, diff two days |
+| English code, CLI and configuration | French throughout | The repository is public; French is reserved for the digest, the only thing a human reads |
 
-## Constraints and risks
+The full decision log, including the four sizing hypotheses that measurement refuted, is in
+[the journal](docs/implementation-journal.md).
 
-- **Fragile sources.** Article scraping breaks regularly (paywalls, JS). Collection must tolerate per-item failure and keep going.
-- **Costs under control, but volume-dependent.** Estimated in [TypeSafe triage](docs/typesafe-triage.md); only input is billed.
-- **TypeSafe is a closed beta**, launched on 2026-09-15, so it sits behind an adapter that can be swapped for a local model.
-- **Privacy.** V1 only handles public sources. No personal data (mail, calendar) enters the pipeline.
-- **Unmeasured quality drift.** Without feedback, the digest can degrade unnoticed. To be addressed in V2 with a log of episodes read or skipped.
+## Documentation
 
-## Open questions
+The scoping notes in `docs/` are in French, kept as the project's working memory — what was
+decided, what was measured, and what was wrong:
 
-- ~~How many items kept per digest?~~ Answered: 8, with an admission floor of 2.0 on the aggregate.
-- ~~Which model writes the digest?~~ Answered: `anthropic/claude-sonnet-5`, chosen by reading three candidates on the same night. The writer is necessarily a different model from the triage engine, which does not generate text.
-- Deduplication: is URL and domain enough, or is semantic grouping needed?
-- Confidence threshold below which an item is dropped without discussion?
-- Should HN comments be kept in the state, and where in the prompt?
-- Which model writes the digest, and should it differ from the triage model?
+- [Pipeline workflow](docs/pipeline-workflow.md) — the stages, their inputs and outputs, the invariants.
+- [TypeSafe triage](docs/typesafe-triage.md) — the state, the typed questions, the weights, the measured costs.
+- [Developer handoff](docs/developer-handoff.md) — the executable brief the project was built from.
+- [Implementation journal](docs/implementation-journal.md) — timeline, measurements, decisions, checklist.
+- [Renaming the folder](docs/renaming-the-folder.md) — one-off local procedure.
+- [Original development brief](docs/prompt.md) — the prompt the project was started from.
 
 ## References
 
-Facts verified on **2026-09-17**:
+Endpoints and facts verified on **2026-09-17**:
 
-- Hacker News API (Algolia): `https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=N` → HTTP 200, fields `points`, `num_comments`, `title`, `url`, `created_at`.
-- Hacker News API (Firebase): `https://hacker-news.firebaseio.com/v0/topstories.json` → HTTP 200, list of ids.
-- Reddit RSS: `https://www.reddit.com/r/<sub>/top/.rss?t=day` → HTTP 200, unauthenticated; fields `title`, `id`, `author`, `updated`, `content` — **no score and no comment count**.
-- Reddit JSON (`/top.json`): returns something other than JSON (blocked) — authentication required.
-- arXiv: `https://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&maxResults=N` → HTTP 200 over HTTPS (over plain HTTP, the response is unusable).
-- French-language feeds tested: `https://www.lemonde.fr/rss/une.xml` → 200; `https://next.ink/feed/` → 200.
-- TypeSafe / Jev: input at USD 0.042 per million tokens, **output free** (public announcement of 2026-09-15, read on 2026-09-17).
-- Algolia pagination caps at 1000 hits per query: 1,139 stories were published on 2026-09-16 and 1,000 of them are reachable (measured 2026-09-17). The oldest stories of a day are therefore out of reach, which does not matter for a ranking that keeps the best scores.
-
-## Status
-
-**Phase:** V1 complete — the four stages run end to end, and a first digest exists
-**Last updated:** 2026-09-17
-
-The three implemented stages are exercised on a real Hacker News day (2026-09-16):
-
-| Measurement | Value |
-| --- | --- |
-| Stories reachable in the window | 1,000 of the 1,139 published |
-| Candidates kept above the score floor | 984 (423 KB written) |
-| HTTP requests for collection | 1, in about 0.9 s |
-| Articles with usable text | 166 of 200 in the full batch (83 %); the rest became metadata-only |
-| Full enrichment of 200 candidates | 2 min 31 s, 718 requests |
-| Text kept per article | 2,000 estimated tokens at most, cut at a sentence boundary |
-| Hacker News comments kept | up to 5 per item, the first top-level ones |
-| Triage input, measured | 1,983 tokens per item over 200 items, 0.44 s per call |
-| Triage of 200 items | 88 s, USD 0.0167, so about USD 0.50 per month |
-| Admission | floor 2.0 keeps 14 candidates on that night; the digest will take 8 |
-| Grid | four questions, weights 0.5 / 0.3 / 0.2, a category recorded but not ranked |
-| Digest | 8 items, French, USD 0.12 for the night, so about USD 0.50 of triage plus USD 3.62 of writing per month |
-
-The four stages have now been run end to end on the night of 2026-09-16: 200 candidates
-collected, enriched and triaged, then a French digest written from the eight the grid
-admitted. The acceptance criterion is a human one and remains open: the digest has to be
-read all the way through. The project is developed one stage at a time, each verified against
-real data before the next; 156 tests cover the pipeline without touching the network or the
-providers.
-
-Three honest caveats, all measured rather than assumed. The engine is **not deterministic**: two
-runs over the same five items moved scores by up to 0.05 and confidences by about 0.01, so
-`--force` does not reproduce a ranking exactly. The character-based token estimate used to bound
-the state understates the invoice by a factor of 1.22. And the scoping notes' aggregation formula
-mixed two scales, which gave the primary-source signal a real weight of 5 % where it looked like
-20 %; the components are now normalised before weighting.
+- Hacker News API (Algolia): `https://hn.algolia.com/api/v1/search` → HTTP 200, fields `points`,
+  `num_comments`, `title`, `url`, `created_at_i`, `_tags`; pagination caps at 1,000 hits.
+- Hacker News API (Firebase): `https://hacker-news.firebaseio.com/v0/item/<id>.json` → HTTP 200,
+  gives a story's `kids` and each comment's `text`.
+- Reddit RSS: `https://www.reddit.com/r/<sub>/top/.rss?t=day` → HTTP 200, unauthenticated, but
+  **neither score nor comment count**; the `.json` endpoint is blocked.
+- arXiv: `https://export.arxiv.org/api/query?search_query=cat:cs.CL&…` → HTTP 200 over HTTPS
+  (over plain HTTP the response is unusable).
+- TypeSafe / Jev: input at USD 0.042 per million tokens, **output free**.
+- OpenRouter: `usage.cost` in the chat-completions response carries the real cost of the call,
+  as documented in its OpenAPI specification.
