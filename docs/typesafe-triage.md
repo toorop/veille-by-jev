@@ -96,16 +96,17 @@ Two rules attached to that aggregation:
 
 ## Costs
 
-Measured on the first real run (2026-09-16, five items), which replaces the sizing hypotheses:
-**200 items per night** and **2,403 input tokens per item**.
+Measured on the full batch of 2026-09-16 (200 items), which replaces the sizing hypotheses:
+**200 items per night** and **1,983 input tokens per item**. A first sample of five items had
+suggested 2,675 tokens: those five were the longest and most commented stories of the day.
 
 Update of 2026-09-17: collection now keeps every candidate of the day (984 on 2026-09-16) and
 enrichment caps what enters triage at 200, so the figures below are for 200 items.
 
 | Item | Volume | Cost |
 | --- | --- | --- |
-| Total state sent | 0.48 million tokens per night, 14.4 million per month | — |
-| Jev triage, measured | input at USD 0.042 per million tokens, output free | **USD 0.61 per month** |
+| Total state sent | 0.40 million tokens per night, 11.9 million per month | — |
+| Jev triage, measured | input at USD 0.042 per million tokens, output free | **USD 0.50 per month**, and USD 0.0167 for the night |
 | Same volume with an LLM at USD 1 per million on input | plus an estimated 2.40 million output tokens per month | about USD 14 per month |
 | Same volume with an LLM at USD 3 per million on input | same | about USD 43 per month |
 
@@ -131,14 +132,13 @@ the unit price.
 - **Not deterministic.** Two runs over the same five items gave scores differing by up to 0.05
   and confidences by about 0.01. A threshold sitting exactly on an observed value can
   therefore flip between runs, and `--force` does not reproduce a ranking bit for bit.
-- **Measured latency**: about 0.6 s per call on a single item, against the 70 to 500 ms
-  announced by the vendor. Consistent with a five-level question on a 2,400-token state, but
-  it is a measurement on five items, not a benchmark.
+- **Measured latency**: 0.44 s per call over 200 calls on the full batch, against the 70 to
+  500 ms announced by the vendor. Consistent with four questions on a 2,000-token state.
 - **The billing basis is assumed.** The printed cost applies the price list to `input_tokens`
   because the provider's own `billing_units` field never reaches the public response object;
   the first invoice is what will confirm it.
 - **A local ranking model is free at the margin** on the target machine. Against it, Jev is
   not cheaper in money, but it is in time, in confidence calibration and in format guarantees
   — and it leaves the GPU free for the V3 TTS.
-- **Order of magnitude**: the volumes above come from five items on one night. A full run over
-  a varied batch is what would make them solid.
+- **One night is one night**: the volumes above come from a single full batch, 2026-09-16. A
+  weekday, a weekend and a news-heavy day would make them solid.

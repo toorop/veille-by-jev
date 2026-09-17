@@ -24,9 +24,15 @@ model = "jev-latest"
 # z = 0 ranks on the raw score. Raise it to demand more certainty.
 score_penalty_z = 1.0
 
-# An item is kept when its adjusted score reaches this value on the level scale. At 1.0 an
-# item must still look at least "marginal" once its downside is subtracted.
-min_adjusted_score = 1.0
+# An item is kept when its adjusted score reaches this value on the level scale. At 2.0 an
+# item must still look at least "useful" once its downside is subtracted.
+#
+# Calibrated on the full 2026-09-16 batch (200 items): the distribution has no natural
+# break, so the floor is not read off the shape but chosen from what we want to read. A
+# floor of 1.0 kept 61 items, far too many for a digest; 2.0 keeps 14, of which the writer
+# takes the best 8. The floor guarantees a minimum quality on a quiet night, the digest
+# size caps the volume, and the two roles stay separate.
+min_adjusted_score = 2.0
 
 # Input price in USD per million tokens, used to print the cost of a run. Output is
 # free. The response reports the real token counts; the note in docs/ is updated from

@@ -293,6 +293,71 @@ be re-calibrated on a real batch rather than on five items.
 - **Weighting the category**, which would have made the digest's section labels influence the
   selection.
 
+## 2026-09-17 — the full calibration run
+
+The first real batch: 200 candidates of 2026-09-16, enriched then triaged end to end. This is
+the run the scoping notes asked for, and it replaces the last sizing hypotheses with readings.
+
+### Measured
+
+| Quantity | Previous figure | Measured on 200 items |
+| --- | --- | --- |
+| Enrichment duration | 10 to 15 min, extrapolated from 20 items | **2 min 31 s** (718 requests) |
+| Articles with usable text | 17 of 20 in a development run | 166 of 200; the other 34 became metadata-only |
+| Input tokens per triaged item | 2,675, from a 5-item sample | **1,983** |
+| Triage duration | about 2 min, extrapolated | **88 s**, so 0.44 s per call |
+| Triage cost of a night | USD 0.67 extrapolated | **USD 0.0167** |
+| Triage cost per month at 200 items | USD 0.67 | **USD 0.50** |
+
+The 5-item sample had overestimated the token count by a third: those five were the longest,
+most commented stories of the day, each hitting the 2,000-token ceiling with five comments.
+Extrapolating from the top of a ranking measures the top of a ranking, not the batch.
+
+### The distribution has no natural break
+
+```text
+  2.50 | ### 3
+  2.25 | ###### 6
+  2.00 | ########### 11
+  1.75 | ########## 10
+  1.50 | ############## 14
+  1.25 | ############ 12
+  1.00 | ############ 12
+  0.75 | ########## 10
+  0.50 | ################################# 33
+  0.25 | ######################################### 41
+  0.00 | ############################################ 44
+ -0.25 | #### 4
+```
+
+Median 0.44, mean 0.71, maximum 2.62. The candidates above each floor: 0.5 keeps 93 items, 1.0
+keeps 61, 1.5 keeps 38, 2.0 keeps 14, 2.2 keeps 6. Since the shape offers no gap to latch onto,
+the floor cannot be read off the data: it is chosen from what we want to read.
+
+### Three checks that give the grid credibility
+
+- **No metadata-only item reaches the top.** All 14 items above 2.0 have extracted article
+  text, so the ranking is not being convinced by titles alone.
+- **The top 20 holds only `tooling` and `research`**, while the day itself was dominated by
+  `society` (96 items out of 200) and `industry` (27). The grid discards what it was written to
+  discard.
+- The 14 leaders are, in order: AMD matrix cores, ternary LLMs, a router for agent tools, CUDA
+  in Rust, recursive self-improvement, a reverse-engineered Jev-like model, Datamimic, DeepSeek
+  v4.1 on an M5 Max, Common Crawl on a Hugging Face bucket, ImpactGate, text-to-image 3.6×
+  faster, pull requests replaced by deltas, Kival, and Swift-Qwen3.8.
+
+### Decisions taken at this stage
+
+- **The admission floor is 2.0**, so an item must still look at least "useful" once its
+  downside is subtracted. At 1.0 the night kept 61 items, far too many to read.
+- **The digest keeps 8 items.** The floor guarantees a minimum quality on a quiet night, the
+  digest size caps the volume on a busy one, and the two roles stay separate rather than being
+  folded into one threshold.
+- **Changing the floor will not cost another call.** The aggregate and its components are
+  stored per item, so the writer re-applies the current floor from `scores.json`. The `passed`
+  flag written by triage is a snapshot of the decision as of its own run, and is recorded as
+  such.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -301,16 +366,17 @@ stages not yet written.
 | Quantity | Hypothesis | Measured | Date |
 | --- | --- | --- | --- |
 | Items collected per night | 200 | 984 candidates kept out of 1,000 received | 2026-09-17 |
+| Items triaged per night | 200 | 200, of which 166 with article text | 2026-09-17 |
 | HTTP requests for collection | not estimated | 1 | 2026-09-17 |
 | Duration of collection | not estimated | 0.9 s | 2026-09-17 |
-| Share of articles with usable text | not estimated | 17 of 20 in a development run | 2026-09-17 |
+| Share of articles with usable text | not estimated | 166 of 200 in the full batch, 83 % | 2026-09-17 |
 | State tokens per item | 1,500 | 2,403 billed tokens per item | 2026-09-17 |
 | Text tokens per readable item | 1,500 | 1,517 median of text alone, comments excluded | 2026-09-17 |
 | Character-based estimate against the invoice | — | a factor of 1.22 | 2026-09-17 |
-| Duration of enrichment | not estimated | 80 s for 20 items, about 13 min extrapolated for 200 | 2026-09-17 |
-| Latency of one triage call | 70 to 500 ms announced | about 0.6 s | 2026-09-17 |
-| Input tokens per item, four questions | — | 2,675, against 2,403 with one question | 2026-09-17 |
-| Triage cost per month | USD 0.38 | USD 0.61 at 200 items per night | 2026-09-17 |
+| Duration of enrichment | not estimated | 2 min 31 s for 200 items, 718 requests | 2026-09-17 |
+| Latency of one triage call | 70 to 500 ms announced | 0.44 s over 200 calls | 2026-09-17 |
+| Input tokens per item | 1,500 | 1,983 over 200 items, against 2,675 on a 5-item sample | 2026-09-17 |
+| Triage cost per month | USD 0.38 | USD 0.50 at 200 items per night | 2026-09-17 |
 | Writing cost per month | not quantified | — | — |
 | Total duration of the nightly run | not estimated | — | — |
 
@@ -343,3 +409,5 @@ stages not yet written.
 | 2026-09-17 | Confidence threshold lowered from 0.6 to 0.50, then dropped entirely | On a five-level scale, 0.6 discarded the day's best-scored item at a confidence of exactly 0.500; the lower-bound ranking then replaced the filter |
 | 2026-09-17 | Components normalised to [0, 1] before weighting | The notes' formula mixed a position on 0-4 with a probability on 0-1, deflating the primary-source weight from 20 % to 5 % |
 | 2026-09-17 | Category recorded but not weighted | A category is a label for the digest, not a quality signal |
+| 2026-09-17 | Admission floor 2.0, digest of 8 items | At 1.0 a night kept 61 items, too many to read; the floor guarantees a minimum quality, the size caps the volume |
+| 2026-09-17 | The floor is re-applied downstream, not baked in | The aggregate is stored per item, so changing the floor costs no new call |

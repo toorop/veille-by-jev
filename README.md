@@ -83,8 +83,8 @@ point of the project.
 
 ## Open questions
 
-- How many items kept per digest: 5, 8, 12?
-- How many candidates should triage score, now that collection keeps the whole day?
+- ~~How many items kept per digest?~~ Answered: 8, with an admission floor of 2.0 on the aggregate.
+- Should the digest be written by the same kind of model that judges, or is a separate writer needed?
 - Deduplication: is URL and domain enough, or is semantic grouping needed?
 - Confidence threshold below which an item is dropped without discussion?
 - Should HN comments be kept in the state, and where in the prompt?
@@ -115,18 +115,20 @@ The three implemented stages are exercised on a real Hacker News day (2026-09-16
 | Stories reachable in the window | 1,000 of the 1,139 published |
 | Candidates kept above the score floor | 984 (423 KB written) |
 | HTTP requests for collection | 1, in about 0.9 s |
-| Articles with usable text | 17 of 20 in a development run; 3 pages were JavaScript shells or posts and became metadata-only |
-| Text kept per article | 2,000 estimated tokens at most, 1,517 median, cut at a sentence boundary |
-| Hacker News comments kept | 5 per item, the first top-level ones |
-| Triage input, measured | 2,675 tokens per item with the four-question grid, about 0.6 s per call |
-| Triage cost | USD 0.000562 for 5 items; about USD 0.67 per month at 200 items a night |
+| Articles with usable text | 166 of 200 in the full batch (83 %); the rest became metadata-only |
+| Full enrichment of 200 candidates | 2 min 31 s, 718 requests |
+| Text kept per article | 2,000 estimated tokens at most, cut at a sentence boundary |
+| Hacker News comments kept | up to 5 per item, the first top-level ones |
+| Triage input, measured | 1,983 tokens per item over 200 items, 0.44 s per call |
+| Triage of 200 items | 88 s, USD 0.0167, so about USD 0.50 per month |
+| Admission | floor 2.0 keeps 14 candidates on that night; the digest will take 8 |
 | Grid | four questions, weights 0.5 / 0.3 / 0.2, a category recorded but not ranked |
 
-`write` is not implemented. The full 200-item enrichment was deliberately not launched during
-development: the duration lines are extrapolations from a 20-item run, not measurements, and the
-admission floor is still calibrated on five items. The project is developed one stage at a time,
-each stage verified against real data before the next one starts; 134 tests cover the three
-stages without touching the network or the provider.
+`write` is not implemented. The pipeline has now been run end to end on a full night: 200
+candidates collected, enriched and triaged on 2026-09-16. Only the digest itself has not been
+produced yet. The project is developed one stage at a time, each stage verified against real
+data before the next one starts; 134 tests cover the three stages without touching the network
+or the provider.
 
 Three honest caveats, all measured rather than assumed. The engine is **not deterministic**: two
 runs over the same five items moved scores by up to 0.05 and confidences by about 0.01, so

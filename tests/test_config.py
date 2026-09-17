@@ -105,7 +105,7 @@ def test_shipped_grid_is_valid() -> None:
     grid = load_questions_config()
     assert grid.triage.model == "jev-latest"
     assert grid.triage.score_penalty_z == 1.0
-    assert grid.triage.min_adjusted_score == 1.0
+    assert grid.triage.min_adjusted_score == 2.0
     assert grid.triage.price_per_mtok_usd == 0.042
     assert grid.triage.max_items == 200
     assert list(grid.questions) == ["interest", "density", "category", "primary_source"]

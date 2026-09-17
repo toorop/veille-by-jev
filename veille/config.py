@@ -93,7 +93,7 @@ class TriageConfig(BaseModel):
         description="Standard deviations of downside subtracted from a score before ranking.",
     )
     min_adjusted_score: float = Field(
-        default=1.0,
+        default=2.0,
         description="Below this adjusted score, an item is dropped without discussion.",
     )
     price_per_mtok_usd: float = Field(
