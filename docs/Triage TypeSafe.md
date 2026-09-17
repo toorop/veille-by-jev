@@ -3,7 +3,7 @@ title: Triage TypeSafe
 aliases:
   - Triage TypeSafe
 type: procédure
-status: cadrage — non implémenté
+status: V1 en cours — étape 1 faite (collecte)
 created: 2026-09-17
 updated: 2026-09-17
 tags:

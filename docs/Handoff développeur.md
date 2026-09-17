@@ -3,7 +3,7 @@ title: Handoff développeur
 aliases:
   - Handoff développeur
 type: procédure
-status: cadrage — non implémenté
+status: V1 en cours — étape 1 faite (collecte)
 created: 2026-09-17
 updated: 2026-09-17
 tags:
@@ -49,12 +49,15 @@ veille-by-jev/                 # racine du dépôt (= dossier de travail)
     questions.toml
   veille/
     cli.py
+    config.py                   # lecture des TOML et calcul de la fenêtre
+    models.py                   # contrat entre étapes (Item, Window, déduplication)
+    store.py
     sources/hn.py
     enrich.py
     triage.py
     write.py
-    store.py
     clients/typesafe.py
+  tests/                        # pytest, aucun test ne touche le réseau
   data/<date>/{items.json,enriched/,scores.json}
   digest/<date>.md
   seen.jsonl
@@ -80,10 +83,11 @@ Détail des étapes et des invariants : [Workflow du pipeline](<Workflow du pipe
 - CLI : `typer` ou `argparse` — au choix de l'implémenteur, l'essentiel étant que chaque sous-commande soit documentée par `--help`.
 - SDK TypeSafe officiel s'il est publié ; sinon appel HTTP direct encapsulé dans `clients/typesafe.py`.
 - Rédaction : un LLM génératif, appelé via une interface également encapsulée.
+- Développement seulement : `pytest` pour les tests, `ruff` pour le format et le lint, tous deux dans le groupe `dev` et configurés dans `pyproject.toml`.
 
 ## Configurations
 
-`config/sources.toml` — sources activées, nombre d'items visés, fenêtre temporelle.
+`config/sources.toml` — sources activées, fenêtre temporelle, plancher de score. **Aucun plafond d'items ici** : la collecte ne coûte qu'une requête et conserve tous les candidats, donc le plafond vit là où il est facturé, c'est-à-dire dans `enrich`, puis dans `triage`.
 
 `config/questions.toml` — définition de l'état, questions typées, échelle descriptive de chaque `Score`, seuil de confiance, coefficients de la formule d'agrégation. **C'est le fichier que Stéphane modifiera pour itérer sur la qualité du tri.** Il doit être lisible et commenté, et un changement de ce fichier ne doit jamais demander de toucher au code.
 

@@ -3,7 +3,7 @@ title: veille-by-jev
 aliases:
   - veille-by-jev
 type: project
-status: scoping — not implemented
+status: V1 in progress — collection operational
 created: 2026-09-17
 updated: 2026-09-17
 tags:
@@ -39,7 +39,7 @@ judges in three minutes. TTS is added only after the digest's quality is validat
 
 | Phase | Content | Status |
 | --- | --- | --- |
-| V1 | Hacker News → Markdown digest (collect, enrich, triage, write) | to be built |
+| V1 | Hacker News → Markdown digest (collect, enrich, triage, write) | in progress — `collect` operational, three stages to go |
 | V2 | Reddit over RSS, arXiv, cross-day deduplication | planned |
 | V3 | Two-voice script, local TTS, podcast RSS feed | planned |
 
@@ -82,6 +82,9 @@ The notes above are written in French; this README is the English entry point.
 | Python | Rust | Rust would buy a few milliseconds on a nightly job; the ecosystem (TypeSafe SDK, HTML extraction, TTS) is Python-first |
 | Local TTS (Piper or Kokoro) in V3 | Cloud TTS API | No cloning needed: local is enough for French, with no data leaving the machine and no billing |
 | `tts-serve` rejected | Use it as the engine layer | Its value is cloning and multiple engines; without cloning it is a needless dependency |
+| Civil-day window in a configurable timezone | Rolling 24 h back from run time | The same `--date` always yields the same batch, whatever time the run happens; a nightly cron passing yesterday's date covers a whole Hacker News day |
+| `items.json` keeps every candidate, uncapped | Truncate to the digest size at collection | Collection costs a single request, so the snapshot is free; the cap belongs to the stage that pays for it |
+| English code, CLI and configuration; French digest only | French throughout | The repository is public; the digest is French because its reader is |
 
 ## Constraints and risks
 
@@ -94,6 +97,7 @@ The notes above are written in French; this README is the English entry point.
 ## Open questions
 
 - How many items kept per digest: 5, 8, 12?
+- How many candidates should triage score, now that collection keeps the whole day?
 - Deduplication: is URL and domain enough, or is semantic grouping needed?
 - Confidence threshold below which an item is dropped without discussion?
 - Should HN comments be kept in the state, and where in the prompt?
@@ -110,11 +114,23 @@ Facts verified on **2026-09-17**:
 - arXiv: `https://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&maxResults=N` → HTTP 200 over HTTPS (over plain HTTP, the response is unusable).
 - French-language feeds tested: `https://www.lemonde.fr/rss/une.xml` → 200; `https://next.ink/feed/` → 200.
 - TypeSafe / Jev: input at USD 0.042 per million tokens, **output free** (public announcement of 2026-09-15, read on 2026-09-17).
+- Algolia pagination caps at 1000 hits per query: 1,139 stories were published on 2026-09-16 and 1,000 of them are reachable (measured 2026-09-17). The oldest stories of a day are therefore out of reach, which does not matter for a ranking that keeps the best scores.
 
 ## Status
 
-**Phase:** scoping
+**Phase:** V1 in progress — stage 1 of 4 (`collect`) is operational
 **Last updated:** 2026-09-17
 
-No line of code has been written or run at this stage. The endpoints above were tested by
-hand on 2026-09-17; the costs are calculated estimates, not measurements of actual usage.
+Stage 1 is implemented and exercised on a real Hacker News day (2026-09-16):
+
+| Measurement | Value |
+| --- | --- |
+| Stories reachable in the window | 1,000 of the 1,139 published |
+| Candidates kept above the score floor | 984 (423 KB written) |
+| HTTP requests | 1, in about 0.9 s |
+| Model calls, cost | 0, USD 0.00 |
+
+`enrich`, `triage` and `write` are not implemented; no API key has been used yet, so the
+TypeSafe cost figures above are still sizing hypotheses rather than measurements. The
+project is developed one stage at a time, each stage verified against real data before the
+next one starts; 44 tests cover stage 1 without touching the network.
