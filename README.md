@@ -45,13 +45,15 @@ Triage is the only stage that makes a **judgement**; writing is the only stage t
 
 ## Navigation
 
-- [Pipeline workflow](<docs/Workflow du pipeline.md>) — the five stages, their inputs/outputs and the invariants.
-- [TypeSafe triage](<docs/Triage TypeSafe.md>) — state definition, typed questions, weights, costs.
-- [Developer handoff](<docs/Handoff développeur.md>) — executable brief for the development agent.
-- [Implementation journal](<docs/Journal de mise en œuvre.md>) — timeline, measurements, decisions, checklist.
-- [Renaming the folder](<docs/Renommage du dossier.md>) — one-off procedure to align the local folder with the project name.
+- [Pipeline workflow](docs/pipeline-workflow.md) — the five stages, their inputs/outputs and the invariants.
+- [TypeSafe triage](docs/typesafe-triage.md) — state definition, typed questions, weights, costs.
+- [Developer handoff](docs/developer-handoff.md) — executable brief for the development agent.
+- [Implementation journal](docs/implementation-journal.md) — timeline, measurements, decisions, checklist.
+- [Renaming the folder](docs/renaming-the-folder.md) — one-off procedure to align the local folder with the project name.
+- [Original development brief](docs/prompt.md) — the prompt the project was started from, kept as a record.
 
-The notes above are written in French; this README is the English entry point.
+The documentation is in English too. The only French output is the digest itself, which is the
+point of the project.
 
 ## Decisions
 
@@ -72,7 +74,7 @@ The notes above are written in French; this README is the English entry point.
 ## Constraints and risks
 
 - **Fragile sources.** Article scraping breaks regularly (paywalls, JS). Collection must tolerate per-item failure and keep going.
-- **Costs under control, but volume-dependent.** Estimated in [TypeSafe triage](<docs/Triage TypeSafe.md>); only input is billed.
+- **Costs under control, but volume-dependent.** Estimated in [TypeSafe triage](docs/typesafe-triage.md); only input is billed.
 - **TypeSafe is a closed beta**, launched on 2026-09-15, so it sits behind an adapter that can be swapped for a local model.
 - **Privacy.** V1 only handles public sources. No personal data (mail, calendar) enters the pipeline.
 - **Unmeasured quality drift.** Without feedback, the digest can degrade unnoticed. To be addressed in V2 with a log of episodes read or skipped.
