@@ -8,13 +8,16 @@ plusieurs modèles.
 
 | Morceau | Où | Versionné ? |
 | --- | --- | --- |
-| Prompt système | `config/write-prompt.md` | oui, c'est un fichier de configuration |
-| Prompt utilisateur | produit par `vbj write --dump-prompt` | non, voir ci-dessous |
+| Prompt système | `config/write-prompt.md` | oui |
+| Prompt utilisateur | `examples/2026-09-16/write-user-prompt.json` | oui, pour permettre de rejouer les tests |
+| Prompt utilisateur, autre date | produit par `vbj write --dump-prompt` dans `data/` | non |
 
-Le prompt utilisateur n'est **pas** versionné, et c'est volontaire : il contient le texte intégral
-des articles et les commentaires Hacker News, donc du contenu de tiers. Il vit à côté des données
-dont il vient, dans `data/<date>/`, que git ignore. C'est la même raison qui garde `data/` et
-`digest/` hors du dépôt public.
+L'exemple versionné sert à copier-coller le prompt user dans un outil de comparaison de modèles.
+**Il contient le texte intégral d'articles tiers et des commentaires Hacker News**, puisque c'est
+ce que reçoit le modèle : c'est un choix assumé pour rendre les tests reproductibles, et c'est le
+premier fichier à retirer si le dépôt devait être redistribué. Les dumps d'autres dates, eux,
+restent dans `data/<date>/`, que git ignore — même raison qui garde `data/` et `digest/` hors du
+dépôt.
 
 ## Le produire
 
@@ -26,7 +29,14 @@ Cette commande construit l'état exact que `write` enverrait, l'écrit, et s'arr
 n'est lue, aucune requête n'est faite, rien n'est facturé**. Elle fonctionne même sans clé
 OpenRouter, et même si le digest du jour existe déjà.
 
-Le fichier de référence du 2026-09-16 est en place : 63 103 caractères, 8 items.
+Le dump par défaut va dans `data/<date>/`, ignoré par git. Pour publier un exemple reproductible,
+il faut le copier hors de `data/`, comme l'exemple du 2026-09-16 :
+
+```bash
+cp data/2026-09-16/write-user-prompt.json examples/2026-09-16/write-user-prompt.json
+```
+
+Le fichier de référence du 2026-09-16 est versionné : 63 103 caractères, 8 items, 63 275 octets.
 
 ## Ce que contient le prompt utilisateur
 

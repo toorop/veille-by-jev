@@ -303,6 +303,11 @@ decided, what was measured, and what was wrong:
 - [TypeSafe triage](docs/typesafe-triage.md) — the state, the typed questions, the weights, the measured costs.
 - [Developer handoff](docs/developer-handoff.md) — the executable brief the project was built from.
 - [Implementation journal](docs/implementation-journal.md) — timeline, measurements, decisions, checklist.
+- [Testing a writer outside the pipeline](docs/writer-testing.md) — how to dump the exact user
+  prompt and compare models elsewhere, and what changes when the digest grows to 20 items. The
+  prompt sent for 2026-09-16 is committed as
+  [`examples/2026-09-16/write-user-prompt.json`](examples/2026-09-16/write-user-prompt.json), to be
+  pasted into a model comparison tool alongside `config/write-prompt.md`.
 - [Renaming the folder](docs/renaming-the-folder.md) — one-off local procedure.
 - [Original development brief](docs/prompt.md) — the prompt the project was started from.
 
