@@ -1,7 +1,7 @@
 [project]
 name = "veille-by-jev"
 version = "0.1.0"
-description = "Veille technologique Hacker News transformée en digest Markdown quotidien en français"
+description = "Nightly Hacker News technology watch, triaged by Jev and written up as a French Markdown digest"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

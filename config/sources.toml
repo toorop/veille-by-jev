@@ -1,29 +1,29 @@
-# Configuration des sources de collecte — étape 1 du pipeline.
-# Ce fichier est fait pour être modifié sans toucher au code.
+# Collection sources configuration — stage 1 of the pipeline.
+# This file is meant to be edited without touching any code.
 
 [collect]
-# Les dates sont des journées civiles dans ce fuseau : --date 2026-09-16 couvre
-# le 2026-09-16 de 00:00 à 24:00 heure locale, converti en UTC pour l'API.
+# Dates are civil days in this timezone: `--date 2026-09-16` covers 16 September
+# from 00:00 to 24:00 local time, converted to UTC for the API.
 timezone = "Europe/Paris"
 
-# Nombre d'items retenus par nuit : c'est l'entrée du triage, donc le poste de coût.
-# La collecte garde les meilleurs scores de la fenêtre, pas tout ce qui est publié.
+# Items kept per night: this is the input of the triage stage, so it is the cost
+# driver. Collection keeps the best scores of the window, not everything published.
 target_items = 200
 
-# Score HN minimal pour qu'un item soit retenu. 1 écarte les stories à 0 point.
+# Minimum Hacker News score for an item to be kept. 1 drops stories with 0 points.
 min_points = 1
 
 [sources.hn]
 enabled = true
 label = "Hacker News"
-# Endpoint Algolia trié par pertinence (les meilleurs scores d'abord), filtré sur
-# une fenêtre de 24 h par created_at_i. Vérifié le 2026-09-17.
+# Algolia endpoint ranked by relevance (best scores first), filtered on a 24 hour
+# window through created_at_i. Verified on 2026-09-17.
 endpoint = "https://hn.algolia.com/api/v1/search"
-# Type d'entrées demandé à l'API : "story" exclut les offres d'emploi.
+# Kind of entries requested from the API: "story" excludes job offers.
 tags = "story"
-# 1000 est le maximum accepté par l'API : une seule requête couvre la journée
-# (constaté : 1139 stories publiées sur la journée du 2026-09-16).
+# 1000 is the maximum the API accepts: a single request covers the whole day
+# (observed: 1139 stories published on 2026-09-16).
 hits_per_page = 1000
-# Nombre de pages maximum à parcourir si la fenêtre dépasse hits_per_page.
+# Maximum number of pages to walk when the window exceeds hits_per_page.
 max_pages = 2
 timeout_s = 30.0

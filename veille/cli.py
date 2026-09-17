@@ -4,9 +4,9 @@ One command per stage, with files as the interface: `collect`, then `enrich`,
 `triage` and `write` (later stages). Each command can be replayed on its own for a
 given date, and replaying a finished stage costs nothing unless `--force` is passed.
 
-Language convention: comments and docstrings are English, like the rest of the
-code. Everything the operator reads — help, progress, errors — is French, like the
-digest itself.
+Language convention: the code, the CLI and the configuration files are English. The
+only French output is the digest itself, because a French digest is the point of the
+project.
 """
 
 from __future__ import annotations
@@ -27,10 +27,12 @@ from veille.store import ROOT, items_path, read_json, write_json
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="veille-by-jev — pipeline de veille Hacker News vers un digest Markdown en français.",
+    help="veille-by-jev — night watch over Hacker News, turned into a French Markdown digest.",
 )
 
 SOURCE_MODULES = {"hn": hn}
+
+FIELD_WIDTH = 9
 
 
 def _fail(message: str, code: int = 2) -> NoReturn:
@@ -39,12 +41,17 @@ def _fail(message: str, code: int = 2) -> NoReturn:
     raise typer.Exit(code=code)
 
 
+def _field(label: str, value: str) -> str:
+    """Render one aligned line of the end-of-run report."""
+    return f"  {label:<{FIELD_WIDTH}} : {value}"
+
+
 def _parse_day(raw: str) -> date:
-    """Parse an `AAAA-MM-JJ` option value, exiting with a clear message otherwise."""
+    """Parse a `YYYY-MM-DD` option value, exiting with a clear message otherwise."""
     try:
         return date.fromisoformat(raw)
     except ValueError:
-        _fail(f"Date invalide : {raw!r}. Format attendu : AAAA-MM-JJ (exemple : 2026-09-16).")
+        _fail(f"Invalid date: {raw!r}. Expected format: YYYY-MM-DD (for example 2026-09-16).")
 
 
 def _iso(moment: datetime) -> str:
@@ -64,35 +71,27 @@ def main(
     version: Annotated[
         bool,
         typer.Option(
-            "--version", callback=_version_callback, is_eager=True, help="Affiche la version."
+            "--version", callback=_version_callback, is_eager=True, help="Show the version."
         ),
     ] = False,
 ) -> None:
     """Run the veille-by-jev pipeline, one subcommand per stage."""
 
 
-@app.command(
-    help=(
-        "Étape 1 — collecte les items des sources activées dans data/<date>/items.json.\n\n"
-        "Aucun appel à un modèle : cette étape est volontairement bête et vérifiable. "
-        "Un échec de source est journalisé dans le fichier et ne fait pas tomber la commande."
-    )
-)
+@app.command()
 def collect(
-    raw_date: Annotated[
-        str, typer.Option("--date", help="Journée civile à collecter, format AAAA-MM-JJ.")
-    ],
+    raw_date: Annotated[str, typer.Option("--date", help="Civil day to collect, as YYYY-MM-DD.")],
     force: Annotated[
         bool,
-        typer.Option("--force", help="Recollecte même si data/<date>/items.json existe déjà."),
+        typer.Option("--force", help="Collect again even if data/<date>/items.json exists."),
     ] = False,
 ) -> None:
-    """Collect the items of every enabled source into `data/<date>/items.json`.
+    """Stage 1 — collect the enabled sources into `data/<date>/items.json`.
 
-    Stage 1. No model call at all: this stage is deliberately dumb and verifiable.
-    A source failure is recorded in the output file and does not bring the command
-    down. Running it again on a date already collected is a no-op unless `--force`
-    is passed.
+    No model call at all: this stage is deliberately dumb and verifiable. A source
+    failure is recorded in the output file and does not bring the command down.
+    Running it again on a date already collected does nothing unless `--force` is
+    passed.
     """
     day = _parse_day(raw_date)
     try:
@@ -100,7 +99,7 @@ def collect(
     except FileNotFoundError as exc:
         _fail(str(exc))
     except ValidationError as exc:  # pragma: no cover - depends on the file being edited
-        _fail(f"config/sources.toml invalide :\n{exc}")
+        _fail(f"invalid config/sources.toml:\n{exc}")
 
     window = day_window(day, settings.collect.timezone)
     out_path = items_path(day)
@@ -111,16 +110,16 @@ def collect(
         stats = existing.get("stats", {})
         already_selected = stats.get("selected", "?")
         collected_at = existing.get("generated_at", "?")
-        typer.echo(f"{out_path.relative_to(ROOT)} existe déjà — rien à faire.")
-        typer.echo(f"  items      : {already_selected} (collecte du {collected_at})")
-        typer.echo(f"  source     : {out_path}")
-        typer.echo("  pour refaire la collecte : ajouter --force")
-        typer.echo("  coût       : 0,00 USD (aucun appel de modèle)")
+        typer.echo(f"{out_path.relative_to(ROOT)} already exists — nothing to do.")
+        typer.echo(_field("items", f"{already_selected} (collected at {collected_at})"))
+        typer.echo(_field("path", str(out_path)))
+        typer.echo(_field("re-run", "add --force to collect again"))
+        typer.echo(_field("cost", "USD 0.00 (no model call)"))
         return
 
     enabled = settings.enabled_sources()
     if not enabled:
-        _fail("Aucune source activée dans config/sources.toml.")
+        _fail("No source is enabled in config/sources.toml.")
 
     started = time.monotonic()
     outcomes: list[CollectOutcome] = []
@@ -133,7 +132,7 @@ def collect(
                         source=name,
                         label=source_cfg.label,
                         status="error",
-                        error=f"type de source non implémenté : {source_cfg.type!r}",
+                        error=f"unimplemented source type: {source_cfg.type!r}",
                     )
                 )
             )
@@ -161,27 +160,31 @@ def collect(
     # run reads either as "source down" or as "quiet day" ---
     typer.echo(f"vbj collect --date {day.isoformat()}")
     utc_range = f"{_iso(window.start)} → {_iso(window.end)}"
-    typer.echo(f"  fuseau    : {window.timezone} — fenêtre UTC {utc_range}")
+    typer.echo(_field("timezone", f"{window.timezone} — UTC window {utc_range}"))
     for outcome in outcomes:
         report = outcome.report
         if report.status == "ok":
             typer.echo(
-                f"  {report.source:<9} : ok — {report.fetched} items bruts, "
-                f"{report.kept} après filtre points >= {settings.collect.min_points}, "
-                f"{report.requests} requête(s), {report.duration_s} s"
+                _field(
+                    report.source,
+                    f"ok — {report.fetched} raw items, "
+                    f"{report.kept} kept by the points >= {settings.collect.min_points} filter, "
+                    f"{report.requests} request(s), {report.duration_s} s",
+                )
             )
         else:
             typer.secho(
-                f"  {report.source:<9} : échec — {report.error}", err=True, fg=typer.colors.YELLOW
+                _field(report.source, f"failed — {report.error}"),
+                err=True,
+                fg=typer.colors.YELLOW,
             )
 
     if not selected:
-        typer.echo(f"  sélection : {after_filter} après filtre → 0 retenu")
-        typer.echo("  coût      : 0,00 USD — aucun appel de modèle à cette étape")
+        typer.echo(_field("selection", f"{after_filter} after filter → 0 kept"))
+        typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))
         _fail(
-            f"Rien à écrire pour le {day.isoformat()} : source en échec ou fenêtre "
-            f"sans item au-dessus de min_points={settings.collect.min_points} "
-            "(voir le rapport ci-dessus).",
+            f"Nothing to write for {day.isoformat()}: a source failed, or the window has no "
+            f"item above min_points={settings.collect.min_points} (see the report above).",
             code=1,
         )
 
@@ -214,9 +217,12 @@ def collect(
     write_json(out_path, payload)
 
     typer.echo(
-        f"  sélection : {after_filter} après filtre → {len(merged)} après déduplication "
-        f"→ {len(selected)} retenus (cible {settings.collect.target_items})"
+        _field(
+            "selection",
+            f"{after_filter} after filter → {len(merged)} after deduplication "
+            f"→ {len(selected)} kept (target {settings.collect.target_items})",
+        )
     )
-    typer.echo(f"  écrit     : {out_path.relative_to(ROOT)} ({out_path.stat().st_size} octets)")
-    typer.echo(f"  publiés   : {_iso(min(published))} → {_iso(max(published))}")
-    typer.echo("  coût      : 0,00 USD — aucun appel de modèle à cette étape")
+    typer.echo(_field("written", f"{out_path.relative_to(ROOT)} ({out_path.stat().st_size} bytes)"))
+    typer.echo(_field("published", f"{_iso(min(published))} → {_iso(max(published))}"))
+    typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))

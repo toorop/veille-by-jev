@@ -69,7 +69,7 @@ def load_sources_config(path: Path | None = None) -> SourcesConfig:
     """
     config_path = path or (CONFIG_DIR / "sources.toml")
     if not config_path.exists():
-        raise FileNotFoundError(f"Configuration absente : {config_path}")
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
     return SourcesConfig.model_validate(raw)
@@ -95,7 +95,7 @@ def day_window(day: date, tz_name: str) -> Window:
     try:
         tz = ZoneInfo(tz_name)
     except KeyError as exc:  # pragma: no cover - depends on the system zone database
-        raise ValueError(f"Fuseau inconnu : {tz_name!r}") from exc
+        raise ValueError(f"Unknown timezone: {tz_name!r}") from exc
 
     start = datetime.combine(day, time.min, tzinfo=tz).astimezone(UTC)
     end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz).astimezone(UTC)
