@@ -1,0 +1,40 @@
+# Writing configuration — stage 4 of the pipeline.
+
+[write]
+# Model identifier in the form the provider expects. OpenRouter uses "provider/model",
+# so changing writer is this one line. Candidates measured on 2026-09-17, at one digest
+# a night (about 17,000 input and 2,500 output tokens):
+#   deepseek/deepseek-v4-flash     USD 0.05 per month
+#   mistralai/mistral-medium-3     USD 0.35 per month
+#   anthropic/claude-sonnet-5      USD 1.77 per month
+model = "mistralai/mistral-medium-3"
+
+# OpenAI-compatible base URL. OpenRouter by default; another provider or a local
+# server would go here, since the writer only speaks the chat-completions protocol.
+base_url = "https://openrouter.ai/api/v1"
+
+# Items the digest keeps, best aggregate first, after the admission floor of the grid.
+# The floor guarantees a minimum quality on a quiet night, this caps the volume.
+digest_size = 8
+
+# The digest is a report, not a piece of writing: low temperature, little room for
+# invention.
+temperature = 0.3
+# Ceiling on the answer, so a runaway completion cannot cost more than expected.
+max_tokens = 4000
+# One call carries eight articles, so it is slow compared with a triage call.
+timeout_s = 180.0
+
+# The system prompt lives in its own file, so the instructions can be tightened — for
+# instance on how much to explain, and to whom — without touching any code.
+prompt_path = "config/write-prompt.md"
+
+# French labels for the category values. They appear in the digest only: the grid stays
+# English because the engine reads it, the digest is French because a human reads it.
+# A value missing here falls back to its raw key.
+[write.labels]
+research = "recherche"
+tooling = "outillage"
+hardware = "matériel"
+industry = "industrie"
+society = "société"

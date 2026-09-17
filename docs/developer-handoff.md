@@ -38,6 +38,8 @@ veille-by-jev/                # repository root (= working directory)
   config/
     sources.toml
     questions.toml
+    write.toml
+    write-prompt.md
   veille/
     cli.py
     config.py                   # TOML reading and window computation

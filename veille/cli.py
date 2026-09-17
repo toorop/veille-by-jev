@@ -21,13 +21,20 @@ from pydantic import ValidationError
 from typesafe_sdk import TypeSafeError
 
 from veille import __version__
-from veille.config import day_window, load_questions_config, load_sources_config
+from veille.clients.openrouter import ChatError
+from veille.config import (
+    day_window,
+    load_questions_config,
+    load_sources_config,
+    load_write_config,
+)
 from veille.enrich import enrich_day
 from veille.env import load_dotenv
 from veille.models import CollectOutcome, Item, ItemScore, SourceReport, deduplicate
 from veille.sources import hn
 from veille.store import (
     ROOT,
+    digest_path,
     enriched_dir,
     iso_utc,
     items_path,
@@ -36,6 +43,7 @@ from veille.store import (
     write_json,
 )
 from veille.triage import triage_day
+from veille.write import write_day
 
 app = typer.Typer(
     add_completion=False,
@@ -433,3 +441,86 @@ def triage(
         typer.echo(
             f"    {_preview_value(score):>5.2f}  spread {spread:<4} {verdict:<7} {score.title[:52]}"
         )
+
+
+@app.command()
+def write(
+    raw_date: Annotated[str, typer.Option("--date", help="Civil day to write up, as YYYY-MM-DD.")],
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Override the configured writer, to compare models."),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", help="Write elsewhere, so a comparison keeps the digest."),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Write again even when the digest already exists."),
+    ] = False,
+) -> None:
+    """Stage 4 — write the French Markdown digest into `digest/<date>.md`.
+
+    Takes the items triage admitted, sends their state to the writing model in one call,
+    and assembles the digest from the answer. Everything structural — dates, links,
+    sources, scores, the set-aside table and the cost line — is generated from the data, so
+    the model only writes prose and can quote no figure of its own.
+
+    The system prompt of `config/write-prompt.md` carries the readability requirement: a
+    non-specialist must understand every sentence on the first pass.
+
+    `--model` and `--output` exist to compare two writers on the same night without
+    overwriting the digest.
+    """
+    day = _parse_day(raw_date)
+    try:
+        cfg = load_write_config()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    except ValidationError as exc:  # pragma: no cover - depends on the file being edited
+        _fail(f"invalid config/write.toml:\n{exc}")
+    try:
+        grid = load_questions_config()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+
+    destination = output or digest_path(day)
+    if destination.exists() and not force:
+        typer.echo(f"{_display_path(destination)} already exists — nothing to do.")
+        typer.echo(_field("re-run", "add --force to write it again"))
+        return
+
+    try:
+        outcome = write_day(day, cfg, grid, model=model, output=output, force=force)
+    except ChatError as exc:
+        _fail(f"the writing model refused the call: {exc}")
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+
+    report = outcome.report
+    typer.echo(f"vbj write --date {day.isoformat()}")
+    typer.echo(
+        _field(
+            "selection",
+            f"{report.kept} written up, {report.dropped} set aside, "
+            f"out of {report.considered} triaged (floor {report.floor})",
+        )
+    )
+    typer.echo(
+        _field(
+            "model",
+            f"{report.model} — {report.input_tokens} input, {report.output_tokens} output, "
+            f"{report.duration_s} s",
+        )
+    )
+    cost = "not reported by the provider" if report.cost_usd is None else f"USD {report.cost_usd}"
+    typer.echo(_field("cost", cost))
+    typer.echo(
+        _field("written", f"{_display_path(destination)} ({destination.stat().st_size} bytes)")
+    )
+    if report.warning:
+        typer.secho(_field("warning", report.warning), err=True, fg=typer.colors.YELLOW)
+
+    typer.echo("  digest :")
+    for line in outcome.markdown.splitlines()[:14]:
+        typer.echo(f"    {line}")

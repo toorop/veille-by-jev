@@ -94,6 +94,8 @@ veille-by-jev/                # repository root
   config/
     sources.toml          # enabled sources and their parameters
     questions.toml        # state, questions, weights, thresholds
+    write.toml            # writer model, digest size, category labels
+    write-prompt.md       # the writer's system prompt, including readability
   veille/
     cli.py                # collect / enrich / triage / write subcommands
     config.py             # TOML reading and window computation
@@ -101,7 +103,8 @@ veille-by-jev/                # repository root
     sources/hn.py         # Hacker News collection
     enrich.py             # fetching, extraction, truncation, cache
     triage.py             # Jev call, score combination
-    write.py              # digest writing
+    write.py              # digest assembly, from the model's prose
+    clients/openrouter.py # writer adapter (OpenAI-compatible, replaceable)
     store.py              # data/ layout, fingerprints, seen.jsonl
     clients/typesafe.py   # Jev adapter (replaceable)
   tests/                  # pytest, never touches the network

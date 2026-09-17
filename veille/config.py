@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field, model_validator
 
 from veille.models import Window
-from veille.store import CONFIG_DIR
+from veille.store import CONFIG_DIR, ROOT
 
 # Algolia API ceiling: pagination stops past 1000 results. One request at that
 # ceiling therefore covers a whole Hacker News day.
@@ -163,6 +163,30 @@ class QuestionsConfig(BaseModel):
         return self
 
 
+class WriteConfig(BaseModel):
+    """Parameters of the writing stage, from `config/write.toml`."""
+
+    model: str = Field(default="mistralai/mistral-medium-3", description="Provider model id.")
+    base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="Chat-completions base URL; any OpenAI-compatible endpoint works.",
+    )
+    digest_size: int = Field(default=8, ge=1, description="Items kept in the digest.")
+    temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=4000, ge=1, description="Ceiling on the answer.")
+    timeout_s: float = Field(default=180.0, gt=0)
+    prompt_path: str = Field(default="config/write-prompt.md")
+    labels: dict[str, str] = Field(
+        default_factory=dict,
+        description="French labels for choice values, used in the digest only.",
+    )
+
+    def prompt_file(self) -> Path:
+        """Return the system prompt path, resolved against the project root."""
+        candidate = Path(self.prompt_path)
+        return candidate if candidate.is_absolute() else ROOT / candidate
+
+
 def load_sources_config(path: Path | None = None) -> SourcesConfig:
     """Load `config/sources.toml`.
 
@@ -230,3 +254,24 @@ def day_window(day: date, tz_name: str) -> Window:
     start = datetime.combine(day, time.min, tzinfo=tz).astimezone(UTC)
     end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz).astimezone(UTC)
     return Window(day=day, timezone=tz_name, start=start, end=end)
+
+
+def load_write_config(path: Path | None = None) -> WriteConfig:
+    """Load `config/write.toml`.
+
+    Args:
+        path: File to read; defaults to `config/write.toml`.
+
+    Returns:
+        The validated settings.
+
+    Raises:
+        FileNotFoundError: If the configuration file does not exist.
+
+    """
+    config_path = path or (CONFIG_DIR / "write.toml")
+    if not config_path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    with config_path.open("rb") as handle:
+        raw = tomllib.load(handle)
+    return WriteConfig.model_validate(raw.get("write", {}))

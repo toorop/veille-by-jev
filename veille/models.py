@@ -243,6 +243,33 @@ class TriageOutcome(BaseModel):
     scores: list[ItemScore] = Field(default_factory=list)
 
 
+class WriteReport(BaseModel):
+    """What one writing run did, as printed at the end of the command."""
+
+    considered: int = Field(default=0, description="Items triaged that night.")
+    kept: int = Field(default=0, description="Items written into the digest.")
+    dropped: int = Field(default=0, description="Items listed as set aside.")
+    floor: float = Field(default=0.0, description="Admission floor applied.")
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float | None = Field(
+        default=None, description="Cost reported by the provider, when it reports one."
+    )
+    duration_s: float = 0.0
+    digest_path: str = ""
+    warning: str | None = Field(
+        default=None, description="Why the model's answer could not be read in full."
+    )
+
+
+class WriteOutcome(BaseModel):
+    """Result of one writing run: its report and the digest itself."""
+
+    report: WriteReport
+    markdown: str
+
+
 def deduplicate(items: Iterable[Item]) -> list[Item]:
     """Keep the best item per URL, sorted by descending score.
 
