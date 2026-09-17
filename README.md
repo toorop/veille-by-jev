@@ -61,6 +61,7 @@ Le triage est le seul étage qui fait du **jugement** ; la rédaction est le seu
 - [Triage TypeSafe](<docs/Triage TypeSafe.md>) — définition de l'état, questions typées, pondérations, coûts.
 - [Handoff développeur](<docs/Handoff développeur.md>) — brief exécutable pour l'agent de développement.
 - [Journal de mise en œuvre](<docs/Journal de mise en œuvre.md>) — chronologie, mesures, décisions, checklist.
+- [Renommage du dossier](<docs/Renommage du dossier.md>) — procédure à usage unique pour aligner le dossier local sur le nom du projet.
 
 ## Décisions
 
