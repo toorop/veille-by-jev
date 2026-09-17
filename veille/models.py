@@ -7,6 +7,7 @@ an interface change, not an internal detail.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, datetime
 from typing import Literal
 
@@ -87,3 +88,23 @@ class CollectOutcome(BaseModel):
 
     items: list[Item] = Field(default_factory=list)
     report: SourceReport
+
+
+def deduplicate(items: Iterable[Item]) -> list[Item]:
+    """Keep the best item per URL, sorted by descending score.
+
+    The same article can be posted twice on one source, and two sources can point at
+    the same URL. The winner is decided by `Item.outranks`, so a single rule governs
+    both the per-source and the cross-source case.
+    """
+    best_by_url: dict[str, Item] = {}
+    for item in items:
+        current = best_by_url.get(item.url)
+        if current is None or item.outranks(current):
+            best_by_url[item.url] = item
+
+    return sorted(
+        best_by_url.values(),
+        key=lambda item: (item.points, item.num_comments, item.published_at),
+        reverse=True,
+    )

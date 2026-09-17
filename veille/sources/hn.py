@@ -24,7 +24,7 @@ from typing import Any
 import httpx
 
 from veille.config import CollectConfig, SourceSettings
-from veille.models import CollectOutcome, Item, SourceReport, Window
+from veille.models import CollectOutcome, Item, SourceReport, Window, deduplicate
 
 # Coverage note: the Algolia API caps pagination at `MAX_HITS_PER_QUERY` results
 # per request (see `veille.config`), so the oldest items of the window are never
@@ -134,17 +134,7 @@ def collect(
     items = [item for item in (_item_from_hit(hit) for hit in hits) if item is not None]
     report.fetched = len(items)
 
-    # The same article can be posted twice: keep the entry with the best score.
-    best_by_url: dict[str, Item] = {}
-    for item in items:
-        current = best_by_url.get(item.url)
-        if current is None or item.outranks(current):
-            best_by_url[item.url] = item
-
-    retained = [item for item in best_by_url.values() if item.points >= collect_cfg.min_points]
-    retained.sort(
-        key=lambda item: (item.points, item.num_comments, item.published_at), reverse=True
-    )
+    retained = [item for item in deduplicate(items) if item.points >= collect_cfg.min_points]
 
     report.status = "ok"
     report.kept = len(retained)

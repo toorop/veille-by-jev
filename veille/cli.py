@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
@@ -20,7 +21,7 @@ from pydantic import ValidationError
 
 from veille import __version__
 from veille.config import day_window, load_sources_config
-from veille.models import CollectOutcome, Item, SourceReport
+from veille.models import CollectOutcome, SourceReport, deduplicate
 from veille.sources import hn
 from veille.store import ROOT, items_path, read_json, write_json
 
@@ -44,6 +45,14 @@ def _fail(message: str, code: int = 2) -> NoReturn:
 def _field(label: str, value: str) -> str:
     """Render one aligned line of the end-of-run report."""
     return f"  {label:<{FIELD_WIDTH}} : {value}"
+
+
+def _display_path(path: Path) -> str:
+    """Render a path relative to the project root, or absolute when it is outside."""
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 def _parse_day(raw: str) -> date:
@@ -114,7 +123,7 @@ def collect(
         stats = existing.get("stats", {})
         already_selected = stats.get("candidates", "?")
         collected_at = existing.get("generated_at", "?")
-        typer.echo(f"{out_path.relative_to(ROOT)} already exists — nothing to do.")
+        typer.echo(f"{_display_path(out_path)} already exists — nothing to do.")
         typer.echo(_field("items", f"{already_selected} (collected at {collected_at})"))
         typer.echo(_field("path", str(out_path)))
         typer.echo(_field("re-run", "add --force to collect again"))
@@ -146,17 +155,7 @@ def collect(
 
     # Merge and deduplicate across sources. Deliberately uncapped: collection is
     # free, so items.json is a full snapshot of the day's candidates.
-    best_by_url: dict[str, Item] = {}
-    for outcome in outcomes:
-        for item in outcome.items:
-            current = best_by_url.get(item.url)
-            if current is None or item.outranks(current):
-                best_by_url[item.url] = item
-    merged = sorted(
-        best_by_url.values(),
-        key=lambda item: (item.points, item.num_comments, item.published_at),
-        reverse=True,
-    )
+    merged = deduplicate(item for outcome in outcomes for item in outcome.items)
     fetched = sum(outcome.report.fetched for outcome in outcomes)
     after_filter = sum(outcome.report.kept for outcome in outcomes)
 
@@ -221,6 +220,6 @@ def collect(
             f"{after_filter} after filter → {len(merged)} after deduplication, all written",
         )
     )
-    typer.echo(_field("written", f"{out_path.relative_to(ROOT)} ({out_path.stat().st_size} bytes)"))
+    typer.echo(_field("written", f"{_display_path(out_path)} ({out_path.stat().st_size} bytes)"))
     typer.echo(_field("published", f"{_iso(min(published))} → {_iso(max(published))}"))
     typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))
