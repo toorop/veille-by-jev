@@ -70,6 +70,7 @@ point of the project.
 | Civil-day window in a configurable timezone | Rolling 24 h back from run time | The same `--date` always yields the same batch, whatever time the run happens; a nightly cron passing yesterday's date covers a whole Hacker News day |
 | `items.json` keeps every candidate, uncapped | Truncate to the digest size at collection | Collection costs a single request, so the snapshot is free; the cap belongs to the stage that pays for it |
 | English code, CLI and configuration; French digest only | French throughout | The repository is public; the digest is French because its reader is |
+| Extraction in plain text, with a floor under which an item is metadata-only | Keep the HTML, or accept any extracted text | Markup has no semantic value and would eat the token budget, which is the cost lever of triage; a 10-token extraction from a JavaScript shell is not an article |
 
 ## Constraints and risks
 
@@ -103,19 +104,24 @@ Facts verified on **2026-09-17**:
 
 ## Status
 
-**Phase:** V1 in progress — stage 1 of 4 (`collect`) is operational
+**Phase:** V1 in progress — stages 1 and 2 of 4 (`collect`, `enrich`) are operational
 **Last updated:** 2026-09-17
 
-Stage 1 is implemented and exercised on a real Hacker News day (2026-09-16):
+Stages 1 and 2 are implemented and exercised on a real Hacker News day (2026-09-16):
 
 | Measurement | Value |
 | --- | --- |
 | Stories reachable in the window | 1,000 of the 1,139 published |
 | Candidates kept above the score floor | 984 (423 KB written) |
-| HTTP requests | 1, in about 0.9 s |
+| HTTP requests for collection | 1, in about 0.9 s |
+| Articles with usable text | 17 of 20 in a development run; 3 pages were JavaScript shells or posts and became metadata-only |
+| Text kept per article | 2,000 estimated tokens at most, 1,517 median, cut at a sentence boundary |
+| Hacker News comments kept | 5 per item, the first top-level ones |
 | Model calls, cost | 0, USD 0.00 |
 
-`enrich`, `triage` and `write` are not implemented; no API key has been used yet, so the
-TypeSafe cost figures above are still sizing hypotheses rather than measurements. The
-project is developed one stage at a time, each stage verified against real data before the
-next one starts; 44 tests cover stage 1 without touching the network.
+`triage` and `write` are not implemented; no API key has been used yet, so the TypeSafe cost
+figures above are still sizing hypotheses rather than measurements. The full 200-item
+enrichment was deliberately not launched during development: the duration line is an
+extrapolation from a 20-item run, not a measurement. The project is developed one stage at a
+time, each stage verified against real data before the next one starts; 69 tests cover stages 1
+and 2 without touching the network.

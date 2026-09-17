@@ -85,6 +85,64 @@ vault is no longer the container. The project is called **veille-by-jev**, the s
 - A rolling 24-hour window: a 02:00 run would miss the end of the Hacker News evening, and two
   runs of the same date would not yield the same batch.
 
+## 2026-09-17 — stage 2: enrichment
+
+### What was built
+
+- `vbj enrich --date YYYY-MM-DD`: fetches the best candidates of the day, extracts the main
+  article text, truncates it to a token budget and collects the first Hacker News comments,
+  one JSON file per item under `data/<date>/enriched/`.
+- The cache is keyed by URL fingerprint and holds only what the article said, never source
+  metadata: a score that drifts over time cannot invalidate it. A second run downloads nothing.
+- Extraction goes through `trafilatura` in plain-text mode: markup, menus, cookie banners and
+  ads never reach the token budget. Measured on a BBC article, 307,079 characters of HTML
+  become 6,071 characters of prose — 2.0% of the raw page.
+- Truncation is placed at a sentence boundary when one is close enough to the budget.
+- An article that cannot be read, or that yields almost nothing, becomes an `unavailable`
+  record instead of a failed run.
+- 69 tests, still with no test touching the network.
+
+### Measured on a development run of 20 items (2026-09-16)
+
+The full 200-item run was deliberately not launched during development; these figures come
+from a 20-item run, and the 200-item lines are extrapolations, not measurements.
+
+| Quantity | Value |
+| --- | --- |
+| Items enriched | 20 fetched, no cache hits |
+| Items with usable text | 17 |
+| Items marked metadata-only by the floor | 3 |
+| Estimated text tokens, readable items | 25,056 total, 1,517 median, 1,990 maximum |
+| Items still cut at the 2,000-token ceiling | 8 of 17 |
+| Hacker News comments kept | 85, five per readable item |
+| HTTP requests | 122 in 80 s |
+| Extrapolation for 200 items | about 1,200 requests and 10 to 15 minutes |
+
+The three metadata-only items are the interesting result: a Mastodon post (34 estimated
+tokens), a Salesforce status page (11) and a Xiaomi JavaScript dashboard (10). Without a floor,
+all three would have entered triage as if they were articles.
+
+### Decisions taken at this stage
+
+- **The cap of 200 items lives here**, not in collection: this is the stage where fetching
+  starts to cost time, and it is where the state of the priced stage begins.
+- **A 2,000-token ceiling and a 200-token floor.** At 1,200 the median article was cut for no
+  reason (measured median: about 1,100 tokens), and at the other end a 10-token extraction was
+  being called an article.
+- **The five first top-level comments**, in the order the API returns them. That order is
+  insertion order, close to chronological but not sorted by time — an honest limitation.
+- **A failed thread does not discard the article**: the text is cached and the failure is
+  recorded in `comments_error` rather than retried.
+
+### What was rejected
+
+- Keeping the HTML: markup has no semantic value and would consume the token budget that is
+  the main cost lever of triage.
+- Keeping the comments published on the article page: the discussion worth reading is the
+  Hacker News thread, which is collected separately.
+- Refusing to cache an item whose thread failed: the article text is the deliverable, and a
+  network hiccup on a comment should not cost another article fetch.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -95,7 +153,9 @@ stages not yet written.
 | Items collected per night | 200 | 984 candidates kept out of 1,000 received | 2026-09-17 |
 | HTTP requests for collection | not estimated | 1 | 2026-09-17 |
 | Duration of collection | not estimated | 0.9 s | 2026-09-17 |
-| State tokens per item | 1,500 | — | — |
+| Share of articles with usable text | not estimated | 17 of 20 in a development run | 2026-09-17 |
+| State tokens per item | 1,500 | 1,517 median of text alone, comments excluded | 2026-09-17 |
+| Duration of enrichment | not estimated | 80 s for 20 items, about 13 min extrapolated for 200 | 2026-09-17 |
 | Triage cost per month | USD 0.38 | — | — |
 | Writing cost per month | not quantified | — | — |
 | Total duration of the nightly run | not estimated | — | — |
@@ -103,7 +163,7 @@ stages not yet written.
 ## Checklist
 
 - [x] `collect` operational on a real day
-- [ ] `enrich` operational, with cache and failure tolerance
+- [x] `enrich` operational, with cache and failure tolerance
 - [ ] `triage` operational with a single question
 - [ ] full grid and coefficients in `config/questions.toml`
 - [ ] `write` operational, digest in French
@@ -122,3 +182,6 @@ stages not yet written.
 | 2026-09-17 | `items.json` keeps every candidate | Collection is free; the cap goes to the stage that pays |
 | 2026-09-17 | English code, CLI and configuration, French digest | Public repository, French-speaking reader |
 | 2026-09-17 | ruff and pytest inside the project, with their configuration | Conventions and invariants stop depending on my discipline |
+| 2026-09-17 | Enrichment cap of 200 items | First stage where fetching costs time, and the start of the state triage pays for |
+| 2026-09-17 | 2,000-token ceiling, 200-token floor for article text | At 1,200 the median article was cut for nothing; at the other end a 10-token extraction was called an article |
+| 2026-09-17 | Five first top-level comments, inserted order | The value is often in the thread; the API order is honest but not sorted by score |

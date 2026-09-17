@@ -120,7 +120,9 @@ wait for Stéphane's validation before moving to the next one. Never chain the s
 single batch.
 
 1. ✅ `collect` alone, until `items.json` is correct on a real day (done 2026-09-17).
-2. `enrich` with cache, checking that roughly 1,200 tokens of text are actually extracted.
+2. ✅ `enrich` with cache, checking that roughly 2,000 tokens of text are extracted from a real
+   article, and that an empty page is marked unavailable rather than passed on as an article
+   (done 2026-09-17).
 3. `triage` with **a single** question, to validate the call contract and the answer format.
 4. Add the other questions and the weighted aggregation.
 5. `write` and the first real read of the digest.

@@ -21,9 +21,10 @@ from pydantic import ValidationError
 
 from veille import __version__
 from veille.config import day_window, load_sources_config
-from veille.models import CollectOutcome, SourceReport, deduplicate
+from veille.enrich import enrich_day
+from veille.models import CollectOutcome, Item, SourceReport, deduplicate
 from veille.sources import hn
-from veille.store import ROOT, items_path, read_json, write_json
+from veille.store import ROOT, enriched_dir, items_path, read_json, write_json
 
 app = typer.Typer(
     add_completion=False,
@@ -222,4 +223,78 @@ def collect(
     )
     typer.echo(_field("written", f"{_display_path(out_path)} ({out_path.stat().st_size} bytes)"))
     typer.echo(_field("published", f"{_iso(min(published))} → {_iso(max(published))}"))
+    typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))
+
+
+@app.command()
+def enrich(
+    raw_date: Annotated[str, typer.Option("--date", help="Civil day to enrich, as YYYY-MM-DD.")],
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", min=1, help="Enrich at most N candidates (development aid)."),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Fetch again even when a cache file already exists."),
+    ] = False,
+) -> None:
+    """Stage 2 — fetch and extract the articles into `data/<date>/enriched/`.
+
+    Reads `data/<date>/items.json`, keeps the best `enrich.max_items`
+    candidates, fetches each article, extracts its main text, truncates it to
+    an estimated token budget and collects the first Hacker News comments.
+    Every item is cached under a URL fingerprint, so a second run downloads
+    nothing again.
+
+    An article that cannot be read becomes an `unavailable` record instead of
+    a failure: the item stays in the batch and the stage carries on.
+    """
+    day = _parse_day(raw_date)
+    try:
+        settings = load_sources_config()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    except ValidationError as exc:  # pragma: no cover - depends on the file being edited
+        _fail(f"invalid config/sources.toml:\n{exc}")
+
+    source_path = items_path(day)
+    if not source_path.exists():
+        _fail(f"{_display_path(source_path)} not found: run `vbj collect --date {day}` first.")
+
+    items = [Item.model_validate(raw) for raw in read_json(source_path)["items"]]
+    cfg = settings.enrich
+    cap = limit if limit is not None else cfg.max_items
+
+    def progress(done: int, total: int) -> None:
+        if done % 25 == 0 or done == total:
+            typer.echo(_field("progress", f"{done}/{total} items"))
+
+    report = enrich_day(day, items, cfg, limit=limit, force=force, on_progress=progress)
+    out_dir = enriched_dir(day)
+
+    typer.echo(f"vbj enrich --date {day.isoformat()}")
+    typer.echo(
+        _field(
+            "selection",
+            f"{report.selected} of {report.candidates} candidates (cap {cap}, "
+            f"{report.fetched} fetched, {report.cached} from cache)",
+        )
+    )
+    typer.echo(
+        _field(
+            "text",
+            f"{report.with_text} with text, {report.unavailable} unavailable, "
+            f"{report.text_tokens} estimated tokens (about {cfg.chars_per_token} characters each)",
+        )
+    )
+    typer.echo(
+        _field(
+            "comments",
+            f"{report.comments_kept} kept, {report.thread_failures} thread(s) unreadable",
+        )
+    )
+    typer.echo(_field("requests", f"{report.requests} HTTP, {report.duration_s} s, no model call"))
+    typer.echo(
+        _field("written", f"{_display_path(out_dir)}/ ({len(list(out_dir.glob('*.json')))} files)")
+    )
     typer.echo(_field("cost", "USD 0.00 — no model call at this stage"))

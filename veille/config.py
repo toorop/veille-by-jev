@@ -48,10 +48,34 @@ class SourceSettings(BaseModel):
     timeout_s: float = Field(default=30.0, gt=0)
 
 
+class EnrichConfig(BaseModel):
+    """Parameters of the enrichment stage.
+
+    This is where the cap bounding the priced stages starts: `items.json` keeps the
+    whole day, but only `max_items` candidates are fetched and truncated, and those
+    are the ones triage will see.
+    """
+
+    max_items: int = Field(default=200, ge=1, description="Candidates enriched per night.")
+    max_text_tokens: int = Field(default=2000, ge=1, description="Body text kept per article.")
+    min_text_tokens: int = Field(
+        default=200,
+        ge=0,
+        description="Below this, the extraction is treated as no text at all.",
+    )
+    max_comments: int = Field(default=5, ge=0, description="Top-level comments kept per item.")
+    max_comment_tokens: int = Field(default=120, ge=1, description="Text kept per comment.")
+    chars_per_token: float = Field(
+        default=4.0, gt=0, description="Characters per token, for the token estimate."
+    )
+    timeout_s: float = Field(default=30.0, gt=0)
+
+
 class SourcesConfig(BaseModel):
     """Whole content of `config/sources.toml`."""
 
     collect: CollectConfig = Field(default_factory=CollectConfig)
+    enrich: EnrichConfig = Field(default_factory=EnrichConfig)
     sources: dict[str, SourceSettings] = Field(default_factory=dict)
 
     def enabled_sources(self) -> dict[str, SourceSettings]:

@@ -57,6 +57,10 @@ def test_shipped_configuration_is_valid() -> None:
     assert settings.collect.min_points == 1
     assert settings.sources["hn"].enabled
     assert settings.sources["hn"].hits_per_page <= MAX_HITS_PER_QUERY
+    assert settings.enrich.max_items == 200
+    assert settings.enrich.max_text_tokens == 2000
+    assert settings.enrich.min_text_tokens == 200
+    assert settings.enrich.max_comments == 5
 
 
 def test_custom_configuration_is_parsed_and_disabled_sources_are_skipped(

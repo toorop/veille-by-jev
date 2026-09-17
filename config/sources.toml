@@ -28,3 +28,37 @@ hits_per_page = 1000
 # Maximum number of pages to walk when the window exceeds hits_per_page.
 max_pages = 2
 timeout_s = 30.0
+
+[enrich]
+# Candidates enriched per night, best scores first. This is where the cap bounding
+# the priced stages starts: items.json keeps the whole day, but only these items are
+# fetched, and they are what triage will see. Items beyond the cap stay in
+# items.json and can be enriched later without collecting again.
+max_items = 200
+
+# Body text kept per article, in estimated tokens. Truncation is the main cost lever
+# of the next stage, since only the input of the triage model is billed. Measured on
+# 2026-09-16: the median article extracts to about 1,100 estimated tokens, so the
+# ceiling only bites on long-form pieces.
+max_text_tokens = 2000
+
+# Floor below which the extraction is not worth calling an article: a page that
+# yields almost nothing (JavaScript shell, empty body) is marked `unavailable`, and
+# triage then judges on the title and metadata alone. Set to 0 to accept any text.
+min_text_tokens = 200
+
+# Top-level Hacker News comments kept per item, in the order the API returns them
+# (insertion order, close to chronological but not sorted by time). Each comment
+# costs one extra HTTP request. Set to 0 to skip the thread entirely.
+max_comments = 5
+
+# Text kept per comment, in estimated tokens.
+max_comment_tokens = 120
+
+# Characters per token used by the estimate. Rough on purpose: the figure that
+# counts is the one Jev bills, so calibrate this against the first real invoice.
+chars_per_token = 4.0
+
+# Per-request timeout for articles and for the Hacker News API.
+timeout_s = 30.0
+

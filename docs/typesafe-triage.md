@@ -35,7 +35,8 @@ What the ranker receives for one item — kept short, since only the input is bi
 - age of the publication;
 - URL type: primary source (paper, official announcement, code repository), press article,
   blog post, discussion;
-- body text truncated to roughly 1,200 tokens;
+- body text truncated to roughly 2,000 estimated tokens, or nothing at all when the extraction
+  was too thin to be an article;
 - retained Hacker News comment excerpts (V2 as far as tuning goes).
 
 ## The three primitives, applied to this project

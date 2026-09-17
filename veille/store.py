@@ -32,6 +32,11 @@ def enriched_dir(day: date) -> Path:
     return data_dir(day) / "enriched"
 
 
+def enriched_path(day: date, url: str) -> Path:
+    """Return the enriched cache file of one URL for `day`."""
+    return enriched_dir(day) / f"{url_fingerprint(url)}.json"
+
+
 def items_path(day: date) -> Path:
     """Return the path of the collection output for `day`."""
     return data_dir(day) / "items.json"

@@ -90,6 +90,63 @@ class CollectOutcome(BaseModel):
     report: SourceReport
 
 
+class Comment(BaseModel):
+    """One discussion comment kept as part of the state."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    author: str | None = None
+    text: str
+    published_at: datetime
+
+
+class EnrichedItem(BaseModel):
+    """Enrichment result for one item, cached under a URL fingerprint.
+
+    Deliberately free of source metadata (points, comment count): those live in
+    `items.json` and drift over time, while this file is a cache of what the article
+    itself said. A score change must not invalidate the cache.
+
+    Status `unavailable` means triage must not rely on the text: either the article
+    could not be read, or it extracted to less than the configured floor. Whatever
+    text was found is still kept, so nothing is lost and nothing is fetched twice.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    item_id: str
+    url: str
+    fingerprint: str
+    status: Literal["ok", "unavailable"]
+    fetched_at: datetime
+    title: str = ""
+    text: str = Field(default="", description="Main text, already truncated.")
+    text_tokens: int = Field(default=0, description="Estimated tokens of `text`.")
+    text_truncated: bool = Field(default=False, description="Whether the article was cut.")
+    comments: list[Comment] = Field(default_factory=list)
+    error: str | None = Field(default=None, description="Why the text is unavailable.")
+    comments_error: str | None = Field(
+        default=None, description="Why the thread is missing, when the text is not."
+    )
+
+
+class EnrichReport(BaseModel):
+    """What one enrichment run did, as printed at the end of the command."""
+
+    candidates: int = Field(default=0, description="Candidates available in items.json.")
+    selected: int = Field(default=0, description="Candidates inside the cap.")
+    cached: int = Field(default=0, description="Items served from the cache.")
+    fetched: int = Field(default=0, description="Items fetched from the network.")
+    with_text: int = Field(default=0, description="Selected items that have article text.")
+    unavailable: int = Field(default=0, description="Selected items without usable text.")
+    comments_kept: int = 0
+    thread_failures: int = Field(default=0, description="Items whose thread was not read.")
+    requests: int = 0
+    text_tokens: int = Field(default=0, description="Estimated tokens written, selected only.")
+    duration_s: float = 0.0
+
+
 def deduplicate(items: Iterable[Item]) -> list[Item]:
     """Keep the best item per URL, sorted by descending score.
 

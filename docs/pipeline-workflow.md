@@ -42,9 +42,11 @@ Three reasons:
 - Input: `items.json`.
 - Output: `data/<date>/enriched/<hash>.json` — body text extracted then truncated, plus the
   retained Hacker News comments.
-- The article text is extracted cleanly (main content, not the menu or the cookie banner),
-  then cut to roughly 1,200 tokens: that truncation drives the cost of the next stage, since
-  only the input is billed.
+- The article text is extracted cleanly (main content only: no menu, no cookie banner, no
+  markup), then cut to roughly 2,000 estimated tokens. That truncation drives the cost of the
+  next stage, since only the input is billed. An extraction yielding less than 200 tokens — a
+  JavaScript shell, a status page, a social post — is treated as no text at all, and the item
+  becomes metadata-only.
 - The first Hacker News comments are kept: on that site the value often sits in the thread
   (an argued critique, missing context) rather than in the link.
 - **Cache mandatory**, indexed by URL fingerprint. An article already enriched is never
