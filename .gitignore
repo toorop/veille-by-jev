@@ -1,0 +1,15 @@
+# Secrets — jamais versionnés
+.env
+
+# Environnement virtuel et caches Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Données produites par le pipeline
+data/
+digest/
+seen.jsonl
