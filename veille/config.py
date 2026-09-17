@@ -173,7 +173,7 @@ class WriteConfig(BaseModel):
     )
     digest_size: int = Field(default=8, ge=1, description="Items kept in the digest.")
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=4000, ge=1, description="Ceiling on the answer.")
+    max_tokens: int = Field(default=8000, ge=1, description="Ceiling on the answer.")
     timeout_s: float = Field(default=180.0, gt=0)
     prompt_path: str = Field(default="config/write-prompt.md")
     labels: dict[str, str] = Field(

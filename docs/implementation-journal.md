@@ -358,6 +358,54 @@ the floor cannot be read off the data: it is chosen from what we want to read.
   flag written by triage is a snapshot of the decision as of its own run, and is recorded as
   such.
 
+## 2026-09-17 — stage 5: writing, and comparing three writers
+
+### What was built
+
+- `vbj write --date YYYY-MM-DD`: takes the items triage admitted, sends their state to the
+  writing model in one call, and assembles the digest from the answer.
+- **The model writes prose only.** The dated title, the links, the sources, the scores, the
+  set-aside table and the cost line are generated from the data, so a model can neither
+  misquote a figure nor forget a link. The answer is JSON keyed by item id, parsed tolerantly:
+  a malformed reply becomes a reserve written into the digest rather than a broken file.
+- The system prompt lives in `config/write-prompt.md`, and that is where the readability
+  requirement lives: say what the thing is before saying why it matters, unpack jargon, short
+  sentences, no sentence that has to be read twice. The prompt is English, like the grid, and
+  demands French prose.
+- The cost comes from the provider, not from a price list: OpenRouter's OpenAPI specification
+  carries the real cost of the call in `usage.cost`. When it is absent the digest says so
+  instead of inventing a figure.
+
+### The comparison, on the same eight items
+
+| Writer | Input | Output | Time | Cost of the night | Per month |
+| --- | --- | --- | --- | --- | --- |
+| `deepseek/deepseek-v4-flash` | 16,036 | 2,917 | 26.6 s | USD 0.0011 | USD 0.03 |
+| `mistralai/mistral-medium-3` | 16,659 | 1,719 | 31.5 s | USD 0.0101 | USD 0.30 |
+| `anthropic/claude-sonnet-5` | 24,109 | 3,655 | 40.9 s | USD 0.0848 | USD 2.54 |
+
+The whole pipeline therefore costs about USD 0.53, 0.80 or 3.04 per month depending on the
+writer, against USD 0.50 for the triage alone.
+
+### What the comparison showed
+
+- **A 4,000-token output ceiling was too low.** Claude's first answer was cut mid-string, which
+  the pipeline caught and wrote into the digest as a reserve with eight missing summaries. The
+  ceiling is now 8,000; the failure was visible rather than silent, which was the point of the
+  reserve mechanism.
+- **The cheapest model is correct but not pedagogical.** DeepSeek's French is sound and its
+  summaries are short, but it stacks jargon without unpacking it: "ternaire", "AVX-512", "Xe2"
+  arrive undefined.
+- **Mistral is the most technically complete** and does unpack terms, but produced two French
+  slips on the second item: "ce qui théorique nécessite" for "théoriquement", and "1,28x" for a
+  multiplication.
+- **Claude explains reasoning rather than listing figures**, which is exactly what the
+  readability requirement asks for: on the ternary-weight paper it is the only one to say *why*
+  the current format costs 1.625 bits per weight. It also wrote "tensor cores" for AMD's matrix
+  cores, which is Nvidia's term: a simplification that misleads.
+- Anthropic's tokeniser counts the same state as 24,109 tokens where the others count about
+  16,000, so its cost per night is higher than the price list alone suggests.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -386,7 +434,7 @@ stages not yet written.
 - [x] `enrich` operational, with cache and failure tolerance
 - [x] `triage` operational with a single question
 - [x] full grid and coefficients in `config/questions.toml`
-- [ ] `write` operational, digest in French
+- [x] `write` operational, digest in French
 - [ ] first digest read all the way through by Stéphane
 - [ ] real cost measured and reported in [TypeSafe triage](typesafe-triage.md)
 - [ ] decision: move on to V2 (Reddit, arXiv) or adjust the grid
@@ -412,4 +460,6 @@ stages not yet written.
 | 2026-09-17 | Admission floor 2.0, digest of 8 items | At 1.0 a night kept 61 items, too many to read; the floor guarantees a minimum quality, the size caps the volume |
 | 2026-09-17 | The floor is re-applied downstream, not baked in | The aggregate is stored per item, so changing the floor costs no new call |
 | 2026-09-17 | The digest must be readable by a non-specialist | A technical batch does not excuse an unreadable digest; it is to be listened to, so a sentence that needs re-reading is a defect. This belongs in the system prompt |
-| 2026-09-17 | Writer model chosen through OpenRouter, on a measured comparison | The cost range from cheap open models to frontier ones is under two dollars a month, so price does not settle it; three candidates will be run on the same stored batch and read |
+| 2026-09-17 | Writer model chosen through OpenRouter, on a measured comparison | The cost range from cheap open models to frontier ones is under three dollars a month, so price does not settle it; three candidates were run on the same stored batch and read |
+| 2026-09-17 | The model writes prose only, the structure is generated | A model that can quote a figure can misquote it; links and scores come from the data |
+| 2026-09-17 | Output ceiling raised from 4,000 to 8,000 tokens | A truncated answer cost a full call and produced eight missing summaries; the reserve made it visible instead of silent |
