@@ -20,8 +20,10 @@ digest_size = 8
 # The digest is a report, not a piece of writing: low temperature, little room for
 # invention.
 temperature = 0.3
-# Ceiling on the answer, so a runaway completion cannot cost more than expected.
-max_tokens = 8000
+# Ceiling on the answer, so a runaway completion cannot cost more than expected. Measured
+# lengths for the same eight items: 3,655, 7,230, then more than 8,000 tokens, which cut the
+# JSON mid-string. The ceiling has to sit above the worst case, not at the average.
+max_tokens = 16000
 # One call carries eight articles, so it is slow compared with a triage call.
 timeout_s = 180.0
 

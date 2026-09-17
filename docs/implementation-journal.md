@@ -389,10 +389,19 @@ writer, against USD 0.50 for the triage alone.
 
 ### What the comparison showed
 
-- **A 4,000-token output ceiling was too low.** Claude's first answer was cut mid-string, which
-  the pipeline caught and wrote into the digest as a reserve with eight missing summaries. The
-  ceiling is now 8,000; the failure was visible rather than silent, which was the point of the
-  reserve mechanism.
+- **The output ceiling had to be raised twice, and the reason is the variance.** For the same
+  prompt and the same eight items, Claude produced 3,655 output tokens on one run, 7,230 on the
+  next, past 8,000 on a third and 8,428 on the fourth: a factor of 2.3 between two valid answers.
+  The ceiling went from 4,000 to 8,000 to 16,000, because it has to sit above the worst case, not
+  at the average. Each truncation cut the JSON mid-string and cost a full call; the reserve
+  mechanism wrote the failure into the digest rather than hiding it.
+- **A claim in the reserve was false, and is now true.** The digest announced that the raw answer
+  was "kept in the command report", which no code did: the sentence promised something that did
+  not exist. The answer is now written to `data/<date>/write-raw-answer.txt`, and the reserve
+  names that file.
+- **The set-aside titles link to their article.** A rejection is only contestable if checking it
+  costs one click, and a title that has to be searched for is not checkable. Titles are escaped
+  before going into the table, since a vertical bar in a title would split the row.
 - **The cheapest model is correct but not pedagogical.** DeepSeek's French is sound and its
   summaries are short, but it stacks jargon without unpacking it: "ternaire", "AVX-512", "Xe2"
   arrive undefined.

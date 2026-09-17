@@ -6,6 +6,7 @@ The writing model is a stand-in, so no test calls a provider.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -219,7 +220,7 @@ def test_the_digest_is_built_from_the_data_not_from_the_model() -> None:
     assert "Résumé." in digest
     assert "**Pourquoi celui-là.** Raison." in digest
     assert "## Items écartés" in digest
-    assert "| 1,20 | recherche | Title 2 |" in digest
+    assert "| 1,20 | recherche | [Title 2](<https://example.com/2>) |" in digest
     assert "0,001000 USD, mesuré par le fournisseur" in digest
 
 
@@ -357,6 +358,10 @@ def test_a_malformed_answer_leaves_a_reserve_in_the_digest(
     text = target.read_text(encoding="utf-8")
     assert "**Réserve sur ce digest**" in text
     assert "_Synthèse manquante" in text
+    # Le digest annonce où trouver la réponse brute : elle doit donc vraiment y être.
+    raw = scores_file.with_name("write-raw-answer.txt")
+    assert raw.read_text(encoding="utf-8") == broken.content
+    assert "write-raw-answer.txt" in text
 
 
 def test_missing_scores_is_an_explicit_error(
@@ -416,3 +421,33 @@ def test_the_prompt_file_is_read_and_sent_as_the_system_message(
     write_day(DAY, write_cfg, grid, output=tmp_path / "d.md", chat=RecordingChat())
 
     assert seen["system"] == "Tu écris un digest."
+
+
+def test_a_dropped_title_is_a_link_and_cannot_break_the_table() -> None:
+    """A vertical bar or a bracket in a title would split the row or close the link."""
+    hostile = ItemScore(
+        item_id="hn:3",
+        url="https://example.com/a_(b)",
+        title="Un titre | avec [des] crochets",
+        adjusted=1.1,
+        answers=[AnswerRecord(name="interest", type="score", value=1.0)],
+    )
+
+    digest = render_digest(
+        DAY,
+        [],
+        [hostile],
+        prose={},
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+    )
+
+    row = next(line for line in digest.splitlines() if line.startswith("| 1,10 |"))
+    # Seuls les pipes non échappés délimitent la ligne : le titre échappé n'en ajoute aucun.
+    assert len(re.findall(r"(?<!\\)\|", row)) == 4
+    assert "Un titre \\| avec \\[des\\] crochets" in row
+    assert "](<https://example.com/a_(b)>)" in row

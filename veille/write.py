@@ -155,6 +155,16 @@ def parse_reply(content: str) -> tuple[dict[str, dict[str, str]], str | None]:
     return prose, None if prose else "the `items` list is empty"
 
 
+def _cell(text: str) -> str:
+    """Escape what would break a Markdown table cell.
+
+    A title holding a vertical bar would split the row, and an unescaped bracket would
+    close the link early. The URL goes between angle brackets for the same reason: a
+    address holding parentheses is common enough on the web.
+    """
+    return text.replace("|", "\\|").replace("[", "\\[").replace("]", "\\]")
+
+
 def _french_number(value: float, digits: int = 2) -> str:
     """Format a number the French way, with a comma as the decimal separator."""
     return f"{value:.{digits}f}".replace(".", ",")
@@ -239,14 +249,14 @@ def render_digest(
         f"Les {len(dropped)} items triés qui ne sont pas retenus, du meilleur au moins bon, "
         "pour que le tri reste contestable.",
         "",
-        "| Agrégat | Catégorie | Titre |",
+        "| Agrégat | Catégorie | Titre (lien vers l'article) |",
         "| --- | --- | --- |",
     ]
     for score in dropped:
         answered = {answer.name: answer.value for answer in score.answers}
         category = _label(str(answered.get("category", "")), labels) or "—"
         aggregate = "—" if score.adjusted is None else _french_number(score.adjusted)
-        lines.append(f"| {aggregate} | {category} | {score.title} |")
+        lines.append(f"| {aggregate} | {category} | [{_cell(score.title)}](<{score.url}>) |")
 
     cost = (
         f"{_french_number(reply.cost_usd, 6)} USD, mesuré par le fournisseur"
@@ -352,10 +362,14 @@ def write_day(
         considered=len(scores),
     )
     if error is not None:
+        # The raw answer is kept next to the day's data: a truncated reply is the one case
+        # where the digest cannot be trusted, and guessing from it would waste the call.
+        raw_path = scores_path(day).with_name("write-raw-answer.txt")
+        raw_path.write_text(reply.content, encoding="utf-8")
         markdown += (
             "\n> **Réserve sur ce digest** : la réponse du modèle n'a pas pu être lue "
             f"intégralement ({error}). Les synthèses manquantes sont signalées ci-dessus, "
-            "et la réponse brute est conservée dans le rapport de la commande.\n"
+            f"et la réponse brute est conservée dans `{raw_path.name}`.\n"
         )
 
     destination.parent.mkdir(parents=True, exist_ok=True)

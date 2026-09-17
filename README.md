@@ -84,9 +84,9 @@ Each command prints what it did, and what it cost. The last one:
 $ uv run vbj write --date 2026-09-16
 vbj write --date 2026-09-16
   selection  : 8 written up, 192 set aside, out of 200 triaged (floor 2.0)
-  model      : anthropic/claude-sonnet-5 — 24242 input, 7230 output, 66.82 s
-  cost       : USD 0.120784
-  written    : digest/2026-09-16.md (24878 bytes)
+  model      : anthropic/claude-sonnet-5 — 24242 input, 8428 output, 78.97 s
+  cost       : USD 0.132764
+  written    : digest/2026-09-16.md (41292 bytes)
 ```
 
 **Replaying is safe and free.** A stage whose output already exists does nothing and spends
@@ -125,9 +125,10 @@ item says what the thing is before saying why it matters, and jargon is unpacked
 repeated. That requirement lives in `config/write-prompt.md`, not in the code, so it can be
 tightened without touching anything else.
 
-Each kept item carries its source, link, category, the scores behind the decision, a two-to-four-sentence summary and a "why this one" line.
-four-sentence summary and a "why this one" line. The eight items are followed by the ones that
-were set aside with their score — 192 rows on that night — and by the cost of the run.
+Each kept item carries its source, link, category, the scores behind the decision, a two-to-four
+sentence summary and a "why this one" line. The eight items are followed by the ones that were set
+aside, with their score, their category and their title as a link to the article, so a rejection
+can be checked in one click — 192 rows on that night — and by the cost of the run.
 
 ## Cost
 
@@ -138,10 +139,10 @@ Measured on the 2026-09-16 batch, not estimated:
 | `collect` | free | free |
 | `enrich` (718 HTTP requests, 2.5 min) | free | free |
 | `triage` — Jev, 200 items, input only | USD 0.0167 | USD 0.50 |
-| `write` — Claude Sonnet 5 | USD 0.1208 | USD 3.62 |
-| **total** | **USD 0.14** | **USD 4.12** |
+| `write` — Claude Sonnet 5 | USD 0.1328 | USD 3.98 |
+| **total** | **USD 0.15** | **USD 4.48** |
 
-The writer costs seven times the triage. If that matters more than prose quality, swapping it is
+The writer costs eight times the triage. If that matters more than prose quality, swapping it is
 one line of `config/write.toml`: the three models compared on that same night, and their
 measured cost, are listed there — the cheapest brings the writer down to USD 0.03 per month.
 
