@@ -67,18 +67,9 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
-def preview_value(score: ItemScore) -> float:
-    """Rank items for the end-of-run preview.
-
-    Stage 3 has a single question, so the highest score answer is the ranking. Once the
-    weighted aggregation lands, this is where the aggregate will be read instead.
-    """
-    values = [
-        float(answer.value)
-        for answer in score.answers
-        if answer.type == "score" and isinstance(answer.value, float)
-    ]
-    return max(values) if values else -1.0
+def _preview_value(score: ItemScore) -> float:
+    """Rank items for the end-of-run preview, on the value triage ranked them by."""
+    return score.adjusted if score.adjusted is not None else -1.0
 
 
 def _parse_day(raw: str) -> date:
@@ -416,7 +407,7 @@ def triage(
         _field(
             "answers",
             f"{report.answered} scored, {report.failed} failed, {report.passed} above "
-            f"confidence {cfg.min_confidence}, {report.dropped} dropped",
+            f"adjusted {cfg.min_adjusted_score}, {report.dropped} dropped",
         )
     )
     typer.echo(
@@ -435,10 +426,9 @@ def triage(
     )
 
     typer.echo("  top scores :")
-    for score in sorted(outcome.scores, key=preview_value, reverse=True)[:5]:
+    for score in sorted(outcome.scores, key=_preview_value, reverse=True)[:5]:
         verdict = "kept" if score.passed else ("failed" if score.error else "dropped")
-        confidence = "n/a" if score.confidence is None else f"{score.confidence:.2f}"
+        spread = "n/a" if score.spread is None else f"{score.spread:.2f}"
         typer.echo(
-            f"    {preview_value(score):>4.1f}  conf {confidence:<4} {verdict:<7} "
-            f"{score.title[:56]}"
+            f"    {_preview_value(score):>5.2f}  spread {spread:<4} {verdict:<7} {score.title[:52]}"
         )

@@ -9,15 +9,29 @@
 [triage]
 # Jev model name; the SDK default is "jev-latest".
 model = "jev-latest"
-# Confidence below which an item is dropped without discussion, whatever its score.
-# Calibrated on the first real run (2026-09-16, five items): the best-scored item of
-# the day came back at 0.500, and the other four between 0.80 and 0.89. On a five-level
-# scale, hesitating between two neighbouring levels naturally lands near 0.5, so 0.6 was
-# discarding the day's biggest news rather than genuinely uncertain items.
-min_confidence = 0.50
+
+# Ranking rule. An item is ranked on `score - z × spread`, where `spread` is the standard
+# deviation of the level distribution the engine returns. This is a lower bound on the
+# position rather than the position itself: an item hesitating between two neighbouring
+# levels loses little, one hesitating between "no interest" and "essential" loses a lot.
+#
+# Calibrated on the first real run (2026-09-16, five items). Filtering on the confidence
+# alone ranked backwards: the best-scored item of the day (2.80) had a low confidence of
+# 0.51 only because its mass sat between levels 2 and 3 — two high, neighbouring levels —
+# while an item firmly at level 2 came back with a confidence of 0.80. Confidence measures
+# how precise the position is, not how high it is.
+#
+# z = 0 ranks on the raw score. Raise it to demand more certainty.
+score_penalty_z = 1.0
+
+# An item is kept when its adjusted score reaches this value on the level scale. At 1.0 an
+# item must still look at least "marginal" once its downside is subtracted.
+min_adjusted_score = 1.0
+
 # Input price in USD per million tokens, used to print the cost of a run. Output is
-# free. The response reports the real token counts, which may differ from this price
-# list; the note in docs/ is updated from measurements, not from this file.
+# free. The response reports the real token counts; the note in docs/ is updated from
+# measurements, not from this file. The character-based estimate used to bound the state
+# understates this invoice by a measured factor of 1.22.
 price_per_mtok_usd = 0.042
 
 # One `Score`: a position on an ordered spectrum, described level by level. `score`

@@ -14,6 +14,7 @@ Two rules come from the scoping notes and live here:
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime
@@ -101,11 +102,69 @@ def build_state(item: Item, enriched: EnrichedItem | None, *, now: datetime) -> 
 def weakest_confidence(answers: Iterable[AnswerRecord]) -> float | None:
     """Return the lowest confidence among the answers.
 
-    A `noul` carries no confidence, so an item whose answers are all `noul` has none: it
-    cannot clear a confidence filter, and `None` says so rather than pretending to 1.0.
+    Kept as a diagnostic, not as a filter: confidence says how precise a position is, not
+    how high it is, and filtering on it alone ranked backwards — see `rank_value` for what
+    replaced it.
     """
     values = [answer.confidence for answer in answers if answer.confidence is not None]
     return min(values) if values else None
+
+
+def level_spread(probabilities: Mapping[str, float]) -> float | None:
+    """Return the standard deviation of a level distribution.
+
+    The keys are level indices and the values their probability. The spread says how far
+    the mass could fall: two neighbouring levels give a small value, "no interest" against
+    "essential" gives a large one. It is what the confidence scalar cannot express.
+
+    Args:
+        probabilities: Distribution as the engine returned it.
+
+    Returns:
+        The standard deviation, or `None` when the distribution is unusable.
+    """
+    pairs: list[tuple[float, float]] = []
+    for key, weight in probabilities.items():
+        try:
+            pairs.append((float(key), float(weight)))
+        except (TypeError, ValueError):
+            return None
+    total = sum(weight for _, weight in pairs)
+    if not pairs or total <= 0:
+        return None
+
+    mean = sum(level * weight for level, weight in pairs) / total
+    variance = sum(weight * (level - mean) ** 2 for level, weight in pairs) / total
+    return math.sqrt(variance)
+
+
+def rank_value(
+    answers: Iterable[AnswerRecord], penalty_z: float
+) -> tuple[float | None, float | None]:
+    """Return the provisional ranking value of an item, and the spread behind it.
+
+    The value is `score - penalty_z × spread`: a lower bound on the position rather than
+    the position itself. An item hesitating between two neighbouring levels loses little;
+    one hesitating between "no interest" and "essential" loses a lot. With a single score
+    question this is unambiguous; the weighted aggregation of stage 4 will replace it, and
+    the raw answers stay in the record either way, so another rule can be computed later
+    without calling the engine again.
+
+    Args:
+        answers: The engine answers, in grid order.
+        penalty_z: Standard deviations of downside to subtract.
+
+    Returns:
+        The adjusted value and the spread, both `None` when no score answer is usable.
+    """
+    answer = next((item for item in answers if item.type == "score"), None)
+    if answer is None or not isinstance(answer.value, float):
+        return None, None
+
+    spread = level_spread(answer.probabilities)
+    if spread is None:
+        return answer.value, None
+    return answer.value - penalty_z * spread, spread
 
 
 def load_enriched(day: date, item: Item) -> EnrichedItem | None:
@@ -151,11 +210,19 @@ def _score_one(
     if result.error is not None:
         return ItemScore(**identity, error=result.error), result.usage
 
-    confidence = weakest_confidence(result.answers)
-    passed = confidence is not None and confidence >= cfg.min_confidence
-    return ItemScore(
-        **identity, answers=result.answers, confidence=confidence, passed=passed
-    ), result.usage
+    adjusted, spread = rank_value(result.answers, cfg.score_penalty_z)
+    passed = adjusted is not None and adjusted >= cfg.min_adjusted_score
+    return (
+        ItemScore(
+            **identity,
+            answers=result.answers,
+            confidence=weakest_confidence(result.answers),
+            adjusted=adjusted,
+            spread=spread,
+            passed=passed,
+        ),
+        result.usage,
+    )
 
 
 def triage_day(
@@ -226,7 +293,8 @@ def triage_day(
         "generated_at": iso_utc(now),
         "settings": {
             "model": cfg.model,
-            "min_confidence": cfg.min_confidence,
+            "score_penalty_z": cfg.score_penalty_z,
+            "min_adjusted_score": cfg.min_adjusted_score,
             "price_per_mtok_usd": cfg.price_per_mtok_usd,
             "questions": {name: spec.model_dump(mode="json") for name, spec in specs.items()},
         },

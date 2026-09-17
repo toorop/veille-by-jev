@@ -67,14 +67,21 @@ def score_item(answers: dict) -> float:
 
 Two rules attached to that aggregation:
 
-- **Confidence filters before ranking.** An item whose confidence falls below the configured
-  threshold is dropped without discussion, even when its score is good. The threshold is 0.50
-  in `config/questions.toml`, calibrated on the first real run: at 0.6 it discarded the
-  best-scored item of the day, which had come back at exactly 0.500 while the other four sat
-  between 0.80 and 0.90.
+- **The ranking uses a lower bound, not the position.** An item is ranked on
+  `score - z × spread`, where the spread is the standard deviation of the level distribution
+  the engine returns. Hesitating between two neighbouring levels costs little; hesitating
+  between "no interest" and "essential" costs a lot. This replaced the notes' original rule —
+  filtering on the confidence alone — after the first real run showed that rule ranked
+  *backwards*: the best-scored item of the day had a confidence of 0.51 only because its mass
+  sat between two high, neighbouring levels, while an item firmly at level 2 came back at 0.80.
+  Confidence measures how precise a position is, not how high it is. Both knobs live in
+  `config/questions.toml`: `score_penalty_z` (0 ranks on the raw score) and
+  `min_adjusted_score`, below which an item is dropped without discussion. The confidence is
+  still recorded, as a diagnostic.
 - **The ranking is logged**, not just the result: every item's score is kept so the grid can
-  be contested after the fact. The grid itself is written into `scores.json` for the same
-  reason.
+  be contested after the fact. The grid itself, and the distribution behind each answer, are
+  written into `scores.json` for the same reason: another rule can be computed from them later
+  without calling the engine again.
 
 ## Costs
 

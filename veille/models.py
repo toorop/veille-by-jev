@@ -204,9 +204,15 @@ class ItemScore(BaseModel):
     num_comments: int = 0
     answers: list[AnswerRecord] = Field(default_factory=list)
     confidence: float | None = Field(
-        default=None, description="Weakest confidence among the answers."
+        default=None, description="Weakest confidence among the answers, kept as a diagnostic."
     )
-    passed: bool = Field(default=False, description="Whether confidence cleared the threshold.")
+    adjusted: float | None = Field(
+        default=None, description="Ranking value: score minus the configured downside penalty."
+    )
+    spread: float | None = Field(
+        default=None, description="Standard deviation of the level distribution behind it."
+    )
+    passed: bool = Field(default=False, description="Whether it cleared the adjusted threshold.")
     error: str | None = None
 
 

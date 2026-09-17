@@ -22,7 +22,9 @@ from veille.models import (
 )
 from veille.triage import (
     build_state,
+    level_spread,
     load_enriched,
+    rank_value,
     triage_day,
     weakest_confidence,
 )
@@ -70,10 +72,20 @@ class FakeEngine:
 
     model = "fake-engine"
 
-    def __init__(self, *, score: float = 3.0, confidence: float = 0.9, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        score: float = 3.0,
+        confidence: float = 0.9,
+        fail: bool = False,
+        probabilities: dict[str, float] | None = None,
+    ) -> None:
         self.score = score
         self.confidence = confidence
         self.fail = fail
+        # A certain distribution by default, so the ranking penalty stays out of the way
+        # unless a test asks for uncertainty.
+        self.probabilities = probabilities or {"0": 0.0, "1": 0.0, "2": 1.0, "3": 0.0, "4": 0.0}
         self.calls: list[dict[str, Any]] = []
         self.closed = False
 
@@ -87,7 +99,7 @@ class FakeEngine:
                 type="score",
                 value=self.score,
                 confidence=self.confidence,
-                probabilities={"0": 1.0},
+                probabilities=self.probabilities,
             )
         ]
         return EngineAnswer(answers=answers, usage=TriageUsage(input_tokens=1500, output_tokens=0))
@@ -152,7 +164,7 @@ def test_state_has_no_thread_key_without_comments() -> None:
     assert "thread" not in state
 
 
-# --- confidence rule ------------------------------------------------------------------
+# --- confidence, kept as a diagnostic -------------------------------------------------
 
 
 def test_weakest_confidence_is_the_lowest() -> None:
@@ -169,6 +181,88 @@ def test_weakest_confidence_ignores_noul_answers() -> None:
 
 def test_weakest_confidence_of_nothing_is_none() -> None:
     assert weakest_confidence([]) is None
+
+
+# --- ranking rule ---------------------------------------------------------------------
+
+
+def test_spread_is_zero_when_the_engine_is_certain() -> None:
+    assert level_spread({"0": 0.0, "1": 0.0, "2": 1.0, "3": 0.0, "4": 0.0}) == 0.0
+
+
+def test_spread_of_adjacent_levels_stays_small() -> None:
+    """Hesitating between "useful" and "important" is precision, not ignorance."""
+    adjacent = level_spread({"0": 0.0, "1": 0.01, "2": 0.37, "3": 0.43, "4": 0.19})
+    assert adjacent is not None
+    assert adjacent == pytest.approx(0.75, abs=0.01)
+
+
+def test_spread_of_opposite_levels_is_large() -> None:
+    assert level_spread({"0": 0.5, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.5}) == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize(
+    "probabilities",
+    [{}, {"a": 1.0}, {"0": 0.0, "1": 0.0}],
+)
+def test_an_unusable_distribution_has_no_spread(probabilities: dict[str, float]) -> None:
+    assert level_spread(probabilities) is None
+
+
+def test_rank_value_subtracts_z_spreads() -> None:
+    answers = [
+        AnswerRecord(
+            name="interest",
+            type="score",
+            value=2.0,
+            confidence=0.5,
+            probabilities={"0": 0.5, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.5},
+        )
+    ]
+    adjusted, spread = rank_value(answers, 1.0)
+
+    assert spread == pytest.approx(2.0)
+    assert adjusted == pytest.approx(0.0)
+    assert rank_value(answers, 0.0)[0] == pytest.approx(2.0)
+
+
+def test_rank_value_without_a_spread_falls_back_to_the_score() -> None:
+    answers = [AnswerRecord(name="interest", type="score", value=2.5, confidence=0.9)]
+    assert rank_value(answers, 1.0) == (2.5, None)
+
+
+def test_rank_value_without_a_score_answer_is_none() -> None:
+    assert rank_value([AnswerRecord(name="primary", type="noul", value=0.9)], 1.0) == (None, None)
+
+
+def test_a_high_score_with_neighbouring_uncertainty_beats_a_certain_middle_score() -> None:
+    """The measurement that replaced the confidence filter.
+
+    On the first real run the best-scored item of the day had a confidence of 0.51 only
+    because its mass sat between two high, neighbouring levels, while an item firmly at
+    level 2 came back at 0.80. Ranking on the lower bound puts them back in order.
+    """
+    nvidia = AnswerRecord(
+        name="interest",
+        type="score",
+        value=2.80,
+        confidence=0.51,
+        probabilities={"0": 0.00, "1": 0.01, "2": 0.37, "3": 0.43, "4": 0.19},
+    )
+    mistral = AnswerRecord(
+        name="interest",
+        type="score",
+        value=2.08,
+        confidence=0.80,
+        probabilities={"0": 0.01, "1": 0.06, "2": 0.80, "3": 0.10, "4": 0.03},
+    )
+
+    high_and_uncertain = rank_value([nvidia], 1.0)[0]
+    middle_and_certain = rank_value([mistral], 1.0)[0]
+
+    assert high_and_uncertain is not None
+    assert middle_and_certain is not None
+    assert high_and_uncertain > middle_and_certain
 
 
 # --- cache reading --------------------------------------------------------------------
@@ -205,43 +299,67 @@ def test_scores_json_records_the_grid_next_to_the_scores(cached_day: Path, tmp_p
     item = make_item()
     write_enriched(cached_day, item, make_enriched(item))
 
-    triage_day(DAY, [item], TriageConfig(min_confidence=0.5), SPECS, engine=FakeEngine())
+    triage_day(DAY, [item], TriageConfig(min_adjusted_score=1.0), SPECS, engine=FakeEngine())
 
     payload = json.loads((tmp_path / "scores.json").read_text(encoding="utf-8"))
-    assert payload["settings"]["min_confidence"] == 0.5
+    assert payload["settings"]["min_adjusted_score"] == 1.0
+    assert payload["settings"]["score_penalty_z"] == 1.0
     assert payload["settings"]["questions"]["interest"]["type"] == "score"
     assert payload["settings"]["questions"]["interest"]["criteria"] == ["a", "b", "c"]
     assert payload["scores"][0]["answers"][0]["name"] == "interest"
     assert payload["scores"][0]["answers"][0]["value"] == 3.0
 
 
-def test_a_confident_item_passes(cached_day: Path) -> None:
+def test_an_item_above_the_adjusted_threshold_passes(cached_day: Path) -> None:
     item = make_item()
     write_enriched(cached_day, item, make_enriched(item))
 
     outcome = triage_day(
-        DAY, [item], TriageConfig(min_confidence=0.6), SPECS, engine=FakeEngine(confidence=0.61)
+        DAY, [item], TriageConfig(min_adjusted_score=1.0), SPECS, engine=FakeEngine(score=3.0)
     )
 
     assert outcome.scores[0].passed is True
+    assert outcome.scores[0].adjusted == 3.0
+    assert outcome.scores[0].spread == 0.0
     assert (outcome.report.passed, outcome.report.dropped) == (1, 0)
 
 
-def test_a_hesitant_item_is_dropped_even_with_a_good_score(cached_day: Path) -> None:
+def test_the_downside_penalty_drops_an_uncertain_item(cached_day: Path) -> None:
+    """One standard deviation of downside, not the raw score, is what the threshold sees."""
     item = make_item()
     write_enriched(cached_day, item, make_enriched(item))
+    # Mass split between "no interest" and "essential": the mean is 2.0, the spread 2.0.
+    split = {"0": 0.5, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.5}
 
     outcome = triage_day(
         DAY,
         [item],
-        TriageConfig(min_confidence=0.6),
+        TriageConfig(min_adjusted_score=1.0, score_penalty_z=1.0),
         SPECS,
-        engine=FakeEngine(score=4.0, confidence=0.59),
+        engine=FakeEngine(score=2.0, probabilities=split),
     )
 
+    assert outcome.scores[0].spread == pytest.approx(2.0)
+    assert outcome.scores[0].adjusted == pytest.approx(0.0)
     assert outcome.scores[0].passed is False
-    assert outcome.scores[0].answers[0].value == 4.0
     assert (outcome.report.passed, outcome.report.dropped) == (0, 1)
+
+
+def test_a_certain_middle_score_passes_where_a_split_one_fails(cached_day: Path) -> None:
+    item = make_item()
+    write_enriched(cached_day, item, make_enriched(item))
+    certain = {"0": 0.0, "1": 0.0, "2": 1.0, "3": 0.0, "4": 0.0}
+
+    outcome = triage_day(
+        DAY,
+        [item],
+        TriageConfig(min_adjusted_score=1.0),
+        SPECS,
+        engine=FakeEngine(score=2.0, probabilities=certain),
+    )
+
+    assert outcome.scores[0].adjusted == pytest.approx(2.0)
+    assert outcome.scores[0].passed is True
 
 
 def test_a_failing_item_is_recorded_and_the_run_continues(cached_day: Path) -> None:

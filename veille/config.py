@@ -87,11 +87,14 @@ class TriageConfig(BaseModel):
     """Provider settings of the triage stage, from `config/questions.toml`."""
 
     model: str = Field(default="jev-latest", description="Model name passed to the engine.")
-    min_confidence: float = Field(
-        default=0.50,
+    score_penalty_z: float = Field(
+        default=1.0,
         ge=0.0,
-        le=1.0,
-        description="Below this, an item is dropped without discussion.",
+        description="Standard deviations of downside subtracted from a score before ranking.",
+    )
+    min_adjusted_score: float = Field(
+        default=1.0,
+        description="Below this adjusted score, an item is dropped without discussion.",
     )
     price_per_mtok_usd: float = Field(
         default=0.042,

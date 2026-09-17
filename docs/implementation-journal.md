@@ -190,10 +190,19 @@ value can flip between runs.
 
 - **The grid is written in English.** The engine reads it, and English is what it handles best;
   French stays reserved for the digest, the only thing a human reads.
-- **The confidence threshold went from 0.6 to 0.50.** On the first run the best-scored item of
-  the day came back at exactly 0.500 and was discarded, while the other four sat between 0.80
-  and 0.90. On a five-level scale, hesitating between two neighbouring levels lands near 0.5,
-  so 0.6 was throwing away the day's biggest news rather than genuinely uncertain items.
+- **The confidence filter was replaced by a lower-bound ranking.** The first rule filtered on
+  the confidence alone, as the notes prescribed. The first real run showed it ranked
+  *backwards*: the best-scored item of the day (2.80) came back at a confidence of 0.51
+  **because** its mass sat between levels 2 and 3 — two high, neighbouring levels — while an
+  item firmly at level 2 came back at 0.80. Confidence measures how precise a position is, not
+  how high it is. Ranking now uses `score - z × spread`, where the spread is the standard
+  deviation of the level distribution: hesitating between neighbouring levels costs little,
+  hesitating between "no interest" and "essential" costs a lot. Measured effect on the same
+  five items: the Nvidia story goes from dropped to first, with an adjusted score of 2.08, and
+  the political story stays last at −0.22 and is the one that gets dropped.
+- **Two knobs rather than one**, both in `config/questions.toml`: `score_penalty_z`, how many
+  standard deviations of downside to subtract (0 ranks on the raw score), and
+  `min_adjusted_score`, below which an item is dropped.
 - **One call per item.** The state is one article and the questions are about it. Batching
   several items into one call would need per-item question names and would blur the state.
 - **The printed cost applies the price list to `input_tokens`.** The provider's own
@@ -208,6 +217,8 @@ value can flip between runs.
 - **Parsing the response in a way that loses the accounting.** The first attempt failed inside
   normalisation *after* five calls had been billed, and reported zero tokens. The usage is now
   carried on every path, including the failure one.
+- **Filtering on the confidence scalar alone**, which the scoping notes prescribed. The
+  measurement above is what refuted it. The confidence is still recorded, as a diagnostic.
 
 ## Measurements
 

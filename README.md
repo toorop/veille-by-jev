@@ -71,6 +71,7 @@ point of the project.
 | `items.json` keeps every candidate, uncapped | Truncate to the digest size at collection | Collection costs a single request, so the snapshot is free; the cap belongs to the stage that pays for it |
 | English code, CLI and configuration; French digest only | French throughout | The repository is public; the digest is French because its reader is |
 | Extraction in plain text, with a floor under which an item is metadata-only | Keep the HTML, or accept any extracted text | Markup has no semantic value and would eat the token budget, which is the cost lever of triage; a 10-token extraction from a JavaScript shell is not an article |
+| Lower-bound ranking, `score − z × spread` | Filter on the confidence scalar, as the scoping notes prescribed | Measured on the first real run: filtering on confidence alone ranked backwards, discarding the day's best-scored story because the engine hesitated between two high, neighbouring levels while being certain about a merely average one |
 
 ## Constraints and risks
 
@@ -120,6 +121,7 @@ The three stages are implemented and exercised on a real Hacker News day (2026-0
 | Triage input, measured | 2,403 tokens per item, about 0.6 s per call |
 | Triage cost | USD 0.000505 for 5 items; USD 0.61 per month at 200 items a night |
 | Rating quality | applied AI and tooling between 1.93 and 2.80, a political story at 0.20 |
+| Ranking rule | `score − z × spread`, a lower bound on the position rather than the position; the best-scored story of the day comes first and the political one is the only drop |
 
 `write` is not implemented. The full 200-item enrichment was deliberately not launched during
 development: the duration lines are extrapolations from a 20-item run, not measurements. The
