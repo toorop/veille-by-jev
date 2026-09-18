@@ -67,10 +67,10 @@ The pieces:
 
 The nightly run takes about six minutes. On a `basic` instance (¼ vCPU, 1 GiB, 4 GB disk), that is
 0.1 GiB-hours, 1.5 vCPU-minutes and 0.4 GB-hours per night — against the 25 GiB-hours, 375
-vCPU-minutes and 200 GB-hours included in the $5 Workers Paid plan each month
+vCPU-minutes and 200 GB-hours included each month in the Workers Paid plan, which costs USD 5
 ([pricing](https://developers.cloudflare.com/containers/platform/pricing/),
 [limits](https://developers.cloudflare.com/containers/platform/limits/)). The container therefore
-adds nothing to the $5, and the models cost about $1 a month on top.
+adds nothing to that USD 5, and the models cost about USD 1 a month on top.
 
 ### Publishing is a write, not a deploy
 
@@ -93,6 +93,23 @@ getting the data out. Two notes:
    stored window.
 3. **Never publish an empty edition.** A night where nothing clears the floor already fails in
    `collect`; that must not become a page.
+
+### A rendering trap, with evidence
+
+The digest is Markdown, and a published site renders it. Most Markdown engines treat two dollar
+signs in the same block as inline maths: everything between them loses its spaces and the links
+inside stop working. This note itself hit it — a sentence holding `$5` twice rendered as one
+mangled expression — and the generated digest is not immune: the night of 2026-09-18 carries four
+dollar signs, all of them inside untouched Hacker News titles in the set-aside table, from `$9`,
+`$875M`, `$3M` and `~$800k`. One per row is harmless only as long as the renderer treats each row
+separately; a renderer that pairs the first with the second mangles everything in between.
+
+The structure the pipeline generates writes `USD 5` everywhere, so it is safe by convention. The two
+places that convention does not cover are the model's prose and the source titles, which are kept
+verbatim on purpose. The cheap fix belongs to the site: **turn maths off in the Markdown renderer**,
+rather than trusting that no model and no headline ever types a dollar sign. Escaping the signs when
+the digest is generated is the alternative, but it would put backslashes into the file as it is read
+today.
 
 ### Honest reservations
 
