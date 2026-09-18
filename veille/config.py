@@ -166,7 +166,7 @@ class QuestionsConfig(BaseModel):
 class WriteConfig(BaseModel):
     """Parameters of the writing stage, from `config/write.toml`."""
 
-    model: str = Field(default="anthropic/claude-sonnet-5", description="Provider model id.")
+    model: str = Field(default="google/gemini-2.5-flash", description="Provider model id.")
     base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         description="Chat-completions base URL; any OpenAI-compatible endpoint works.",

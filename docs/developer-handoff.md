@@ -98,8 +98,8 @@ changing it must never require touching code.
 `digest/<date>.md`, in Markdown:
 
 - a dated title;
-- for each kept item: original title, source, link, two to four sentences of summary **in
-  French**, and a "why this one" line;
+- for each kept item: original title, source, link, a summary **in French** of a few sentences up
+  to about fifteen, and a "why this one" line;
 - **written for a non-specialist.** The batch is technical by nature, but the digest must not
   require an expert to be understood: an item says what the thing is before saying why it
   matters, jargon is unpacked rather than repeated, and no sentence assumes the reader knows

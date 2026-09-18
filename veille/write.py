@@ -1,7 +1,8 @@
 """Stage 4: writing the digest.
 
 The writer is the only stage that produces text, and it is given a deliberately narrow job:
-turn each kept item's state into two to four French sentences and a "why this one" line.
+turn each kept item's state into a French summary — a few sentences up to about fifteen, however
+many the explanation needs — and a "why this one" line.
 Everything structural — the dated title, the links, the sources, the scores, the set-aside
 table and the cost line — is generated here from the data, so the model can neither misquote a
 figure nor forget a link.

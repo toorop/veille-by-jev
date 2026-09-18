@@ -71,9 +71,10 @@ Three reasons:
 
 - Input: the N items kept by triage, with their full text.
 - Output: `digest/<date>.md` — this is **the deliverable**.
-- Expected format: for each kept item, the title, the source, the link, two to four sentences
-  of summary **in French**, and a "why this one" line. At the end, the list of dropped items
-  with their score, to keep a trace of what was rejected and make the ranking contestable.
+- Expected format: for each kept item, the title, the source, the link, a summary **in French**
+  running from a few sentences up to about fifteen, and a "why this one" line. At the end, the
+  list of dropped items with their score, to keep a trace of what was rejected and make the
+  ranking contestable.
 - Writing happens **directly in French** from English sources, with no translation step.
 - **Written for a non-specialist.** Each item says what the thing is before saying why it
   matters, and unpacked jargon rather than repeated jargon. The digest is meant to be

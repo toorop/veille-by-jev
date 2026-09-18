@@ -84,9 +84,9 @@ Each command prints what it did, and what it cost. The last one:
 $ uv run vbj write --date 2026-09-16
 vbj write --date 2026-09-16
   selection  : 8 written up, 192 set aside, out of 200 triaged (floor 2.0)
-  model      : anthropic/claude-sonnet-5 — 24242 input, 8428 output, 78.97 s
-  cost       : USD 0.132764
-  written    : digest/2026-09-16.md (41292 bytes)
+  model      : google/gemini-2.5-flash — 17381 input, 2344 output, 14.73 s
+  cost       : USD 0.0110743
+  written    : digest/2026-09-16.md (43047 bytes)
 ```
 
 **Replaying is safe and free.** A stage whose output already exists does nothing and spends
@@ -127,10 +127,11 @@ item says what the thing is before saying why it matters, and jargon is unpacked
 repeated. That requirement lives in `config/write-prompt.md`, not in the code, so it can be
 tightened without touching anything else.
 
-Each kept item carries its source, link, category, the scores behind the decision, a two-to-four
-sentence summary and a "why this one" line. The eight items are followed by the ones that were set
-aside, with their score, their category and their title as a link to the article, so a rejection
-can be checked in one click — 192 rows on that night — and by the cost of the run.
+Each kept item carries its source, link, category, the scores behind the decision, a French
+summary running from a few sentences up to about fifteen, and a "why this one" line. The
+eight items are followed by the ones that were set aside, with their score, their category and
+their title as a link to the article, so a rejection can be checked in one click — 192 rows on
+that night — and by the cost of the run.
 
 ## Cost
 
