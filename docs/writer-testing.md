@@ -1,123 +1,124 @@
 # Testing a writer outside the pipeline
 
-Note opérationnelle pour comparer des modèles de rédaction sans passer par `vbj write`, par
-exemple dans une application qui envoie le même prompt système et le même prompt utilisateur à
-plusieurs modèles.
+Operational note for comparing writing models without going through `vbj write` — for instance in
+an application that sends the same system prompt and the same user prompt to several models.
 
-## Les deux morceaux à récupérer
+## The two pieces to collect
 
-| Morceau | Où | Versionné ? |
+| Piece | Where | Committed? |
 | --- | --- | --- |
-| Prompt système | `config/write-prompt.md` | oui |
-| Prompt utilisateur | `examples/2026-09-16/write-user-prompt.json` | oui, pour permettre de rejouer les tests |
-| Prompt utilisateur, autre date | produit par `vbj write --dump-prompt` dans `data/` | non |
+| System prompt | `config/write-prompt.md` | yes |
+| User prompt | `examples/2026-09-16/write-user-prompt.json` | yes, so tests can be replayed |
+| User prompt, another date | produced by `vbj write --dump-prompt` into `data/` | no |
 
-L'exemple versionné sert à copier-coller le prompt user dans un outil de comparaison de modèles.
-**Il contient le texte intégral d'articles tiers et des commentaires Hacker News**, puisque c'est
-ce que reçoit le modèle : c'est un choix assumé pour rendre les tests reproductibles, et c'est le
-premier fichier à retirer si le dépôt devait être redistribué. Les dumps d'autres dates, eux,
-restent dans `data/<date>/`, que git ignore — même raison qui garde `data/` et `digest/` hors du
-dépôt.
+The committed example exists so the user prompt can be pasted into a model-comparison tool.
+**It contains the full text of third-party articles and of Hacker News comments**, since that is
+what the model receives: a deliberate choice, to make the tests reproducible, and the first file
+to remove if the repository were ever redistributed. Dumps of other dates stay in
+`data/<date>/`, which git ignores — the same reason that keeps `data/` and `digest/` out of the
+repository.
 
-## Le produire
+## Producing it
 
 ```bash
 uv run vbj write --date 2026-09-16 --dump-prompt data/2026-09-16/write-user-prompt.json
 ```
 
-Cette commande construit l'état exact que `write` enverrait, l'écrit, et s'arrête : **aucune clé
-n'est lue, aucune requête n'est faite, rien n'est facturé**. Elle fonctionne même sans clé
-OpenRouter, et même si le digest du jour existe déjà.
+That command builds the exact state `write` would send, writes it, and stops: **no key is read, no
+request is made, nothing is billed**. It works with no OpenRouter key at all, and even when the
+day's digest already exists.
 
-Le dump par défaut va dans `data/<date>/`, ignoré par git. Pour publier un exemple reproductible,
-il faut le copier hors de `data/`, comme l'exemple du 2026-09-16 :
+The default dump goes to `data/<date>/`, ignored by git. To publish a reproducible example, copy
+it out of `data/`, as was done for 2026-09-16:
 
 ```bash
 cp data/2026-09-16/write-user-prompt.json examples/2026-09-16/write-user-prompt.json
 ```
 
-Le fichier de référence du 2026-09-16 est versionné : 63 103 caractères, 8 items, 63 275 octets.
+The 2026-09-16 reference file is committed: 63,103 characters, 8 items, 63,275 bytes.
 
-## Ce que contient le prompt utilisateur
+## What the user prompt contains
 
-Un seul objet JSON, deux clés :
+A single JSON object with two keys:
 
 ```json
 { "date": "2026-09-16", "items": [ { … }, … ] }
 ```
 
-Chaque item porte :
+Each item carries:
 
-| Champ | Contenu |
+| Field | Content |
 | --- | --- |
-| `id` | l'identifiant stable, `hn:<objectID>` |
-| `title` | le titre original, en anglais |
-| `url` | le lien de l'article |
-| `source_score`, `source_comments` | les points et le nombre de commentaires HN |
-| `aggregate` | le score agrégé du triage, sur l'échelle 0–4 |
-| `answers` | la valeur brute de chaque question pondérée (`interest`, `density`, `primary_source`) |
-| `article` | `status`, `truncated`, `text`, `reason` — le texte extrait, tronqué à 2 000 tokens estimés, ou `unavailable` si l'extraction a échoué |
-| `thread` | jusqu'à 5 commentaires HN, `author` et `text`, absent s'il n'y en a pas |
+| `id` | the stable identifier, `hn:<objectID>` |
+| `title` | the original title, in English |
+| `url` | the link to the article |
+| `source_score`, `source_comments` | the Hacker News points and comment count |
+| `aggregate` | the triage aggregate score, on the 0–4 scale |
+| `answers` | the raw value of every weighted question (`interest`, `density`, `primary_source`) |
+| `article` | `status`, `truncated`, `text`, `reason` — the extracted text, truncated at 2,000 estimated tokens, or `unavailable` if extraction failed |
+| `thread` | up to 5 Hacker News comments, `author` and `text`, absent when there are none |
 
-Le prompt système demande au modèle de **ne jamais inventer** un fait, un chiffre ou un nom
-absent de cet état, et de dire explicitement quand l'article n'a pas pu être lu.
+The system prompt tells the model to **never invent** a fact, a figure or a name that is absent
+from that state, and to say so explicitly when an article could not be read.
 
-## Ce que le modèle doit rendre
+## What the model must return
 
-JSON seul, sans texte autour ni balises de code :
+JSON only, with no surrounding text and no code fences:
 
 ```json
 {"items": [{"id": "hn:49731360",
-            "synthese": "deux à quatre phrases en français",
-            "pourquoi": "une phrase en français"}]}
+            "synthese": "the French summary, from a few sentences up to about fifteen",
+            "pourquoi": "one French sentence"}]}
 ```
 
-Autant d'entrées que d'items reçus, dans le même ordre, avec l'`id` recopié à l'identique.
+As many entries as items received, in the same order, with `id` copied exactly.
 
-**Le reste du digest n'est pas demandé au modèle.** Le titre daté, les liens, les sources, les
-scores, le tableau des items écartés et la ligne de coût sont générés par le pipeline à partir
-des données. Un modèle ne doit jamais recopier un chiffre qu'il pourrait déformer, et un test
-automatique le vérifie.
+**The rest of the digest is not asked of the model.** The dated title, the links, the sources, the
+scores, the table of set-aside items and the cost line are generated by the pipeline from the
+data. A model must never retype a figure it could distort, and a test checks that it does not.
 
-## Passer à vingt items
+## Moving to twenty items
 
-Deux réglages, aucun code :
+Two settings, no code:
 
-1. `config/write.toml` : `digest_size = 20`
-2. `config/questions.toml` : `min_adjusted_score` doit descendre, sinon le plancher coupe avant
-   la taille. Mesuré sur la nuit du 2026-09-16 :
+1. `config/write.toml`: `digest_size = 20`.
+2. `config/questions.toml`: `min_adjusted_score` has to come down, or the floor cuts before the
+   size does. Measured on the night of 2026-09-16:
 
-   | Plancher | Items admis |
+   | Floor | Items admitted |
    | --- | --- |
-   | 2,0 (valeur actuelle) | 14 |
-   | 1,9 | 19 |
-   | 1,8 | 24 |
+   | 2.0 (current value) | 14 |
+   | 1.9 | 19 |
+   | 1.8 | 24 |
 
-   Pour vingt items, viser **1,9**.
+   For twenty items, aim at **1.9**.
 
-Le coût suit le volume, et pas seulement la sortie :
+Cost follows the volume, and not only the output:
 
-- l'état passe d'environ 63 Ko à 158 Ko pour vingt items, soit **≈ 61 000 tokens d'entrée** ;
-- la sortie double au moins : 8 428 tokens pour huit items sur le dernier run, à quoi il faut
-  ajouter la variance mesurée, qui atteint un facteur 2,3 entre deux runs identiques.
+- the state goes from about 63 KB to 158 KB for twenty items, roughly **61,000 input tokens**;
+- the output grows by about the same factor as the item count: the measured Gemini run produced
+  2,344 output tokens for eight items, so expect **≈ 6,000 tokens for twenty**, with the caveat
+  that output length varies between identical runs.
 
-Repère utile : avec le tokenizer de Claude, l'état consomme **environ 2,6 caractères par token**,
-pas 4. Les 63 103 caractères du dump correspondent aux 24 242 tokens d'entrée réellement facturés.
-Une estimation à 4 caractères par token sous-estime donc la facture de moitié.
+Useful yardstick: character count does not convert to tokens at a fixed rate across providers.
+The 63,103 characters of the dump were billed as 24,242 input tokens by Claude (about 2.6
+characters per token) and as 17,381 by Gemini (about 3.6). Estimating at 4 characters per token
+understates a Claude invoice by roughly half.
 
-## Ce que la comparaison a déjà montré
+## What the comparison has shown so far
 
-Sur les mêmes huit items du 2026-09-16, trois modèles ont été essayés et lus :
+On the same eight items of 2026-09-16, four models were tried and read:
 
-| Modèle | Coût de la nuit | Ce qui a été observé |
+| Model | Cost of the night | What was observed |
 | --- | --- | --- |
-| `deepseek/deepseek-v4-flash` | 0,0011 USD | français correct, mais le jargon est empilé sans être expliqué |
-| `mistralai/mistral-medium-3` | 0,0101 USD | le plus complet techniquement, deux fautes de français relevées |
-| `anthropic/claude-sonnet-5` | 0,1328 USD | le seul qui explique le raisonnement, retenu pour ça |
+| `deepseek/deepseek-v4-flash` | 0.0011 USD | correct French, but jargon is stacked without being explained |
+| `mistralai/mistral-medium-3` | 0.0101 USD | the most technically complete, with two French mistakes found |
+| `anthropic/claude-sonnet-5` | 0.1328 USD | the best reasoning, but assumed a specialist reader before the prompt was hardened |
+| `google/gemini-2.5-flash` | 0.0111 USD | 5.4 sentences per item against Claude's 3.2 for 6% more words: the same content, cut into shorter sentences, and jargon defined on first use. Retained |
 
-Le détail, y compris les défauts trouvés et les corrections apportées au prompt, est dans le
-[Journal de mise en œuvre](implementation-journal.md).
+Two method notes: compare models **on the same dump**, or the luck of the run blurs the
+comparison; and judge on the French and on the explanation, not on the technical sheet — that is
+the only criterion that counts here, and it appears on no price table.
 
-Deux conseils de méthode : comparer les modèles **sur le même dump**, sinon le hasard du run
-brouille la comparaison ; et juger sur le français et la vulgarisation, pas sur la fiche
-technique — c'est le seul critère qui compte ici, et il ne se lit sur aucun tableau de prix.
+The detail, including the defects found and the fixes made to the prompt, is in the
+[Implementation journal](implementation-journal.md).

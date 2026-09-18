@@ -415,7 +415,7 @@ writer, against USD 0.50 for the triage alone.
 - Anthropic's tokeniser counts the same state as 24,109 tokens where the others count about
   16,000, so its cost per night is higher than the price list alone suggests.
 
-### The writer chosen, and what that cost
+### The first writer chosen: Claude Sonnet 5
 
 `anthropic/claude-sonnet-5` writes the digest. It is the only one of the three that explains
 reasoning instead of listing figures, which is what the readability requirement asks for, and
@@ -432,6 +432,39 @@ The hardened prompt makes the model write more: 7,230 output tokens for eight it
 3,655 before. Measured on the contract digest: 24,242 input and 7,230 output tokens, 67 s,
 USD 0.1208 for the night, so about USD 3.62 per month. The pipeline as a whole costs about
 USD 4.12 per month, of which USD 0.50 is the triage.
+
+### The second writer chosen: Gemini 2.5 Flash
+
+Reading the contract digest exposed a defect the model comparison had not: the summaries were
+too condensed for the reader they were written for. The prompt capped them at "two to four
+sentences", which forced a choice between explaining a term and staying inside the limit. The
+model resolved that conflict by dropping the explanation.
+
+The prompt now says the writer is **not** limited to two to four sentences — a few sentences for
+a simple tool, up to about fifteen for a dense paper — while stating that length is not a goal
+and that padding is a defect.
+
+Measured on the same eight items of 2026-09-16, with the same state:
+
+| Writer | Sentences per item | Words | Output tokens | Cost of the night |
+| --- | --- | --- | --- | --- |
+| `anthropic/claude-sonnet-5`, old prompt | 3 to 4, mean 3.2 | 1,060 | 8,428 | USD 0.1328 |
+| `google/gemini-2.5-flash`, new prompt | 4 to 7, mean 5.4 | 1,119 | 2,344 | USD 0.0111 |
+
+The sentence count rose by 69 % and the word count by 6 %: the model cut the same content into
+shorter sentences instead of filling the space. That is the intended effect of asking for one
+idea per sentence, and it is why the length permission costs almost nothing.
+
+The pedagogy did change where it mattered. Item 1 now defines "cœurs matriciels" on first use —
+"les circuits d'un GPU spécialisés dans la multiplication de matrices" — and contrasts AMD's
+matrix cores with Nvidia's tensor cores correctly, where the Claude run assumed the term known.
+A check of the new prose against the state it was given found all **63 of its verifiable details**
+in that state, so the extra room invited no invention.
+
+Gemini via OpenRouter also reports the real `usage.cost`, which the direct Google endpoint does
+not: the digest's cost line stays measured rather than estimated. The Claude digest is kept
+alongside as `digest/2026-09-16--claude.md`, since the two are the comparison this decision rests
+on. The pipeline now costs about **USD 0.83 per month**, of which USD 0.50 is the triage.
 
 ## Measurements
 
@@ -452,8 +485,8 @@ stages not yet written.
 | Latency of one triage call | 70 to 500 ms announced | 0.44 s over 200 calls | 2026-09-17 |
 | Input tokens per item | 1,500 | 1,983 over 200 items, against 2,675 on a 5-item sample | 2026-09-17 |
 | Triage cost per month | USD 0.38 | USD 0.50 at 200 items per night | 2026-09-17 |
-| Writing cost per month | not quantified | — | — |
-| Total duration of the nightly run | not estimated | — | — |
+| Writing cost per month | not quantified | USD 0.33 at 8 items, USD 0.81 extrapolated at 20 items | 2026-09-17 |
+| Total duration of the nightly run | not estimated | 4 min 15 s, the sum of the four measured stages | 2026-09-17 |
 
 ## Checklist
 
@@ -492,3 +525,6 @@ stages not yet written.
 | 2026-09-17 | Output ceiling raised from 4,000 to 8,000 tokens | A truncated answer cost a full call and produced eight missing summaries; the reserve made it visible instead of silent |
 | 2026-09-17 | `anthropic/claude-sonnet-5` writes the digest | The only candidate that explains reasoning instead of listing figures; about USD 3.62 a month for the writer alone |
 | 2026-09-17 | The prompt forbids substituting a neighbouring term | It had called AMD's matrix cores "tensor cores", Nvidia's term: a simplification that teaches something false |
+| 2026-09-17 | The summary length cap is removed | "Two to four sentences" made the writer choose between explaining a term and staying inside the limit, and it dropped the explanation; the cap was a compression constraint masquerading as a style rule |
+| 2026-09-17 | `google/gemini-2.5-flash` writes the digest, superseding Claude Sonnet 5 | It defines jargon on first use where Claude assumed it, for USD 0.0111 a night against USD 0.1328; the Claude digest is kept beside it as the comparison the decision rests on |
+| 2026-09-17 | Each writer comparison is checked against the state it was given | Longer summaries are the first place invention would show, and asserting the prose is grounded is not the same as checking: 63 of 63 verifiable details were found in the state |
