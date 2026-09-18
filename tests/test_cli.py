@@ -1,6 +1,7 @@
 """Tests for the command-line surface.
 
-The idempotence test stubs the output path, so no test here touches the network.
+No test here touches the network: the idempotence tests stub the output path, and the
+full-run tests stub the stages themselves.
 """
 
 from __future__ import annotations
@@ -10,12 +11,42 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from veille import __version__
-from veille.cli import app
+from veille.cli import StageResult, app
 
 runner = CliRunner()
+
+STAGES = ("collect", "enrich", "triage", "write")
+
+
+def stub_stages(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[str],
+    *,
+    conflict_on: str | None = None,
+    fail_on: str | None = None,
+) -> None:
+    """Replace the four stage functions by recorders, so a run is testable in isolation."""
+    for stage in STAGES:
+        if stage == fail_on:
+
+            def boom(*_args: object, _stage: str = stage, **_kwargs: object) -> StageResult:
+                calls.append(_stage)
+                raise typer.Exit(code=2)
+
+            monkeypatch.setattr(f"veille.cli._{stage}", boom)
+            continue
+
+        def record(
+            *_args: object, _stage: str = stage, **_kwargs: object
+        ) -> StageResult:
+            calls.append(_stage)
+            return StageResult(_stage, skipped=True, conflict=_stage == conflict_on)
+
+        monkeypatch.setattr(f"veille.cli._{stage}", record)
 
 
 def test_version_option() -> None:
@@ -153,3 +184,93 @@ def test_dumping_the_prompt_writes_it_without_calling_a_model(
     assert target.exists()
     assert json.loads(target.read_text(encoding="utf-8"))["date"] == "2026-09-16"
     assert "no model call" in result.stdout
+
+
+def test_the_help_lists_the_whole_night_command() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "run " in result.stdout
+
+
+def test_a_full_run_calls_the_four_stages_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    stub_stages(monkeypatch, calls)
+
+    result = runner.invoke(app, ["run", "--date", "2026-09-16"])
+
+    assert result.exit_code == 0
+    assert calls == list(STAGES)
+    assert "0 ran, 4 skipped" in result.stdout
+
+
+def test_a_full_run_stops_when_the_stored_window_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch from another window must not be written up as if it were the asked one."""
+    calls: list[str] = []
+    stub_stages(monkeypatch, calls, conflict_on="collect")
+
+    result = runner.invoke(app, ["run", "--date", "2026-09-16"])
+
+    assert result.exit_code == 1
+    assert calls == ["collect"]
+    assert "differs" in result.output
+
+
+def test_a_failing_stage_stops_the_run_and_names_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    stub_stages(monkeypatch, calls, fail_on="enrich")
+
+    result = runner.invoke(app, ["run", "--date", "2026-09-16"])
+
+    assert result.exit_code == 2
+    assert calls == ["collect", "enrich"]
+    assert "stopped at enrich" in result.output
+    assert "nothing after enrich was attempted" in result.output
+
+
+def test_the_total_separates_this_run_from_earlier_spending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A skipped stage that cost money before must not look free, nor bill this run."""
+    calls: list[str] = []
+    stub_stages(monkeypatch, calls)
+
+    def spent(*_args: object, **_kwargs: object) -> StageResult:
+        calls.append("triage")
+        return StageResult("triage", skipped=True, already_usd=0.0166)
+
+    monkeypatch.setattr("veille.cli._triage", spent)
+
+    result = runner.invoke(app, ["run", "--date", "2026-09-16"])
+
+    assert "USD 0.000000 for this run" in result.stdout
+    assert "USD 0.016600 for this window" in result.stdout
+
+
+def test_the_bare_invocation_runs_the_whole_night(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`vbj` with no argument is the cron line: it must run, not print help."""
+    seen: list[tuple[str | None, bool]] = []
+    monkeypatch.setattr(
+        "veille.cli.full_run", lambda raw, *, force: seen.append((raw, force))
+    )
+
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 0
+    assert seen == [(None, False)]
+
+
+def test_an_explicit_command_does_not_trigger_a_full_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bare-invocation hook must not fire when a stage is named."""
+    seen: list[tuple[str | None, bool]] = []
+    monkeypatch.setattr(
+        "veille.cli.full_run", lambda raw, *, force: seen.append((raw, force))
+    )
+
+    result = runner.invoke(app, ["collect", "--help"])
+
+    assert result.exit_code == 0
+    assert seen == []

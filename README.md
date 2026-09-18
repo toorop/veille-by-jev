@@ -59,17 +59,36 @@ overrides it for one run.
 
 ## Use
 
-Four commands, one per stage. Files are the interface between them, so any stage can be replayed
-alone.
+**One command is enough.** `vbj` with no argument runs the whole night — collect, enrich, triage,
+write — and is the line a cron job needs:
+
+```bash
+uv run vbj                          # the night: last 24 h, ending now
+uv run vbj --help                   # the stages, if you want to steer them
+```
+
+`vbj run` does exactly the same thing and reads better in a crontab; both take `--date D` (a whole
+civil day instead of the last 24 h) and `--force` (redo every stage). **Repeating it is safe**: a
+run whose window is already collected, scored and written up does nothing and spends nothing.
+
+The four stages are also commands of their own. Files are the interface between them, so any stage
+can be replayed alone.
 
 | Command | Reads | Writes | Calls a model |
 | --- | --- | --- | --- |
+| `vbj run [--date D]` | all four, in order | `digest/D.md` | Jev, then OpenRouter |
 | `vbj collect [--date D]` | `config/sources.toml` | `data/D/items.json` | no |
 | `vbj enrich [--date D]` | `items.json` | `data/D/enriched/<hash>.json` | no |
 | `vbj triage [--date D]` | `items.json`, `enriched/`, `config/questions.toml` | `data/D/scores.json` | Jev |
 | `vbj write [--date D]` | the admitted items of `scores.json` | `digest/D.md` | OpenRouter |
 
-A full night, as run for 2026-09-16:
+The day and the window are decided **once**, at the start of a run, and every stage works on
+exactly that: a night started before midnight cannot collect one day and write up another. A stage
+that fails stops the run, since the ones after it depend on its output, and the report still says
+what the night had cost by then — separating what this run spent from what an earlier run already
+spent on the same window.
+
+A full night, stage by stage, as run for 2026-09-16:
 
 ```bash
 uv run vbj collect --date 2026-09-16   # 1,000 stories, 984 candidates, 1 request, 0.9 s, free
@@ -133,6 +152,21 @@ a handful of items, and `write` takes `--model` and `--output` to compare two wr
 night without overwriting the digest. `write --dump-prompt <path>` writes the exact state it would
 send and stops, without reading a key or calling anything — see
 [Testing a writer outside the pipeline](docs/writer-testing.md).
+
+What a full run prints when everything is already done — the earlier spending is shown, because a
+skipped stage is not a free one:
+
+```text
+  ----------------------------------------------
+  stages     : 0 ran, 4 skipped
+    collect  skipped
+    enrich   skipped
+    triage   skipped  (USD 0.016654 spent earlier)
+    write    skipped
+  digest     : digest/2026-09-16.md (51025 bytes)
+  cost       : USD 0.000000 for this run
+  already    : USD 0.016654 for this window, earlier runs
+```
 
 ### What the digest looks like
 

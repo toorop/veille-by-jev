@@ -20,6 +20,12 @@ Three reasons:
 
 ## The five stages
 
+**`vbj` with no argument, or `vbj run`, chains the four stages** on one window decided at the
+start: the day cannot change under a run that crosses midnight, a stage that fails stops the
+rest, and the closing report separates what this run spent from what an earlier run already
+spent on the same window. Everything below describes the stages it calls, which are also
+commands of their own.
+
 ### 1. Collection — `vbj collect [--date YYYY-MM-DD]`
 
 - Input: source configuration.

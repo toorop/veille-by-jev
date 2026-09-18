@@ -60,6 +60,7 @@ veille-by-jev/                # repository root (= working directory)
 
 | Command | Input | Output | Constraint |
 | --- | --- | --- | --- |
+| `vbj run [--date D]` | all four, in order | `digest/D.md` | both providers |
 | `vbj collect [--date D]` | `config/sources.toml` | `data/D/items.json` | no model call |
 | `vbj enrich [--date D]` | `items.json` | `data/D/enriched/<hash>.json` | cache by URL fingerprint |
 | `vbj triage [--date D]` | `items.json` + `enriched/` + `config/questions.toml` | `data/D/scores.json` | calls TypeSafe |
