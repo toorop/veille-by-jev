@@ -363,10 +363,15 @@ Honest limits, all measured rather than assumed:
 | --- | --- | --- |
 | V1 | Hacker News → Markdown digest (`collect`, `enrich`, `triage`, `write`) | done |
 | V2 | Reddit over RSS, arXiv, cross-day deduplication, feedback on what was read | planned |
-| V3 | Two-voice script, local TTS, podcast RSS feed | planned |
+| — | Where the digest goes: website, feed, or the two-voice script and podcast | open, see below |
 
-Explicitly out of scope: email or calendar notifications, voice cloning, web application, user
-accounts, automatic publishing to a platform.
+Explicitly out of scope: email or calendar notifications, voice cloning, user accounts.
+
+**The destination is undecided, and it is now a real question.** The digest was built on the
+assumption that a text file comes first and audio later; a website is a third option, and
+publishing to one is no longer out of scope. The thinking so far — two tracks, all-Cloudflare with
+EmDash or plain static Astro, the measured cost, the reservations and the open questions — is
+recorded in [Publishing the digest](docs/website-evolution.md). Nothing is built.
 
 ## Decisions worth knowing
 
@@ -384,8 +389,8 @@ The full decision log, including the four sizing hypotheses that measurement ref
 
 ## Documentation
 
-The scoping notes in `docs/` are in French, kept as the project's working memory — what was
-decided, what was measured, and what was wrong:
+The notes in `docs/` are in English, like the code, and kept as the project's working memory —
+what was decided, what was measured, and what was wrong:
 
 - [Pipeline workflow](docs/pipeline-workflow.md) — the stages, their inputs and outputs, the invariants.
 - [TypeSafe triage](docs/typesafe-triage.md) — the state, the typed questions, the weights, the measured costs.
@@ -397,6 +402,8 @@ decided, what was measured, and what was wrong:
   [`examples/2026-09-16/write-user-prompt.json`](examples/2026-09-16/write-user-prompt.json), to be
   pasted into a model comparison tool alongside `config/write-prompt.md`.
 - [Renaming the folder](docs/renaming-the-folder.md) — one-off local procedure.
+- [Publishing the digest](docs/website-evolution.md) — the destination of the digest: the website
+  idea, EmDash, the all-Cloudflare architecture, its cost and its reservations. An idea, not a plan.
 - [Original development brief](docs/prompt.md) — the prompt the project was started from.
 
 ## References
