@@ -521,6 +521,24 @@ became a real collection, writing `data/2026-09-18/items.json` — free, and the
 but a test must never decide to hit a live API. It now tests the resolution helper directly, and
 no test invokes a stage without `--date`.
 
+### French titles, first real run
+
+The first run with translated headings produced fourteen summaries and **thirteen translated
+titles**: the model simply left `titre_fr` out of one entry ("Apprentice: A Slim, Extensible
+Coding Harness"). The fallback did what it was built for — the English title headed the item and
+the `Titre original` line vanished — so a missing field costs a French heading, not a broken
+digest. The prompt now says in as many words that every item needs the field.
+
+Comparing the thirteen, all of them are longer than the original in characters, and the total is
+**1.31 times the English in words** (116 words to 152). That is mostly French being French: it
+needs articles, "de", "des", and it spells out what English compresses. Which means the rule the
+prompt originally carried — *do not make it longer than the original* — was unachievable, and a
+model trying to obey it would have dropped information rather than words. It has been replaced by
+an honest test: keep the original's information and no more, since **added meaning is the defect,
+not added length**. The translations themselves held up on reading: product names and model
+numbers survived ("Cactus Needle 3", "QWEN3.8 27B", "Plugin4Shell"), and no heading claimed
+anything its article did not.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -542,6 +560,14 @@ stages not yet written.
 | Triage cost per month | USD 0.38 | USD 0.50 at 200 items per night | 2026-09-17 |
 | Writing cost per month | not quantified | USD 0.59 at 14 items, USD 0.33 at 8 items | 2026-09-17 |
 | Total duration of the nightly run | not estimated | 4 min 15 s, the sum of the four measured stages | 2026-09-17 |
+| Candidates in a rolling 24 h window | 200 | 988 from 1,000 received, against 984 for a civil day | 2026-09-18 |
+| Freshness of a rolling batch | — | newest story published 5 min before the run | 2026-09-18 |
+| Share of articles with usable text, rolling batch | 83 % | 163 of 200, 81 % | 2026-09-18 |
+| Enrichment of an uncached batch | 2 min 31 s | 5 min 6 s, 805 requests, 0 from cache | 2026-09-18 |
+| Triage of a rolling batch | ~1,983 input per item | 394,067 input, 19,740 output, 90 s, USD 0.0166 | 2026-09-18 |
+| Writing a 14-item digest | 2,344 output at 8 items | 28,788 input, 5,857 output, 38 s, USD 0.0233 | 2026-09-18 |
+| French titles against the English originals | — | 1.31 times the word count, one field omitted out of 14 | 2026-09-18 |
+| Cost of a full rolling night | USD 0.04 | USD 0.0398 (triage 0.0166 + write 0.0233) | 2026-09-18 |
 
 ## Checklist
 
@@ -592,3 +618,5 @@ stages not yet written.
 | 2026-09-17 | No test may invoke a stage without an explicit `--date` | Making the option optional turned the "missing date is rejected" test into a real collection against a live API — free and harmless that once, but a test decides nothing about the network |
 | 2026-09-17 | The digest heads each item with the title **translated into French**, the English original moving to a `Titre original` line | An English heading is the first thing the reader meets in an otherwise French digest, and the digest is due to be listened to: a French voice reading a raw English title is exactly where the listener gives up. The translation is the model's, so it is a new place where a heading can overstate an article — which is why the prompt says translate, do not summarise |
 | 2026-09-17 | The set-aside table keeps its English titles | 186 rows of raw ranking data, not prose: translating them would cost tokens on a list nobody reads linearly, and would lose the exact trace of what was rejected |
+| 2026-09-18 | The length rule on translated titles is replaced by an information rule | "Do not make it longer than the original" is unachievable in French, which ran 1.31 times the English in words across thirteen titles; a model obeying it literally would have dropped information. The rule now says: keep the original's information and no more |
+| 2026-09-18 | `titre_fr` is declared mandatory in the prompt | The first real run left it out of one entry in fourteen. The fallback held, but a French digest with an English heading is the exact defect the field was added to remove |

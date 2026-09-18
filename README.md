@@ -136,29 +136,36 @@ send and stops, without reading a key or calling anything — see
 
 ### What the digest looks like
 
+The head of the digest, from the 18 September rolling run — a real one, abridged in one place:
+
 ```markdown
-# Veille du 16 septembre 2026
+# Veille du 18 septembre 2026
 
 **14 items retenus** sur 200 candidats triés. Seuil d'admission : 2,0.
 
-## Accurate Models of AMD Matrix Cores
+Fenêtre couverte : du 17 septembre 2026 08 h 22 au 18 septembre 2026 08 h 22 (Europe/Paris, 24 h).
 
-- **Source** : Hacker News — 75 points, 9 commentaires
-- **Lien** : <https://arxiv.org/abs/2609.14845>
+## [LLM à paramètres infinis : générer et adapter les poids à partir de données en direct](<https://arxiv.org/abs/2609.18842>)
+
+- **Source** : Hacker News — 133 points, 38 commentaires
+- **Titre original** : Infinite-Parameter LLMs: Generating and Adapting Weights from Live Data
+- **Lien** : <https://arxiv.org/abs/2609.18842>
 - **Catégorie** : recherche
-- **Scores** : interest 2,3 · density 4,0 · primary_source 0,9 · agrégat 2,62
+- **Scores** : interest 2,6 · density 3,9 · primary_source 0,8 · agrégat 2,47
 
-Cet article présente des modèles logiciels précis des cœurs matriciels d'AMD, qui sont des
-circuits spécialisés dans les GPU pour la multiplication de matrices. […] Les chercheurs ont
-caractérisé le comportement de ces cœurs sur trois architectures de GPU AMD (CDNA 1, 2 et 3) en
-utilisant des vecteurs de test spécifiques. […] Ces modèles permettent de quantifier les écarts
-de précision au niveau applicatif entre les cœurs matriciels d'AMD et les cœurs tenseurs de
-Nvidia.
+Cet article propose une nouvelle architecture, appelée "LLM à paramètres infinis", qui permet au
+modèle d'apprendre en continu à partir des interactions en direct. Inspirée des architectures
+"Mixture-of-Experts" (MoE), cette approche utilise un "hyperréseau" compact. Un hyperréseau est un
+réseau neuronal qui génère les poids (les valeurs numériques qui déterminent le comportement du
+modèle) d'un autre réseau neuronal. […] Cela signifie que les connaissances et les comportements
+appris persistent au-delà d'une seule interaction, libèrent la fenêtre de contexte (la quantité
+d'informations que le modèle peut traiter à la fois) et peuvent mieux généraliser que
+l'apprentissage contextuel traditionnel.
 
-**Pourquoi celui-là.** Si vous travaillez avec des calculs haute performance sur GPU AMD et que
-la précision numérique est critique, ces modèles peuvent vous aider à comprendre et à anticiper
-les comportements spécifiques de ces architectures, là où la documentation officielle est
-lacunaire.
+**Pourquoi celui-là.** Cette recherche propose une solution pour que les LLM apprennent et
+s'adaptent en temps réel aux interactions des utilisateurs, ce qui pourrait rendre les assistants
+IA plus pertinents et persistants sans nécessiter de réentraînement coûteux ou de prompts
+surchargés.
 ```
 
 The digest is written for a reader who is interested in the field but **not a specialist**: an

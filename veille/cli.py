@@ -90,6 +90,13 @@ def _parse_day(raw: str) -> date:
         _fail(f"Invalid date: {raw!r}. Expected format: YYYY-MM-DD (for example 2026-09-16).")
 
 
+def _headline(command: str, day: date, explicit: bool) -> str:
+    """Name the run in the end-of-run report, saying whether the date was given or defaulted."""
+    if explicit:
+        return f"vbj {command} --date {day.isoformat()}"
+    return f"vbj {command} ({day.isoformat()}, no --date)"
+
+
 def _resolve_day(raw: str | None) -> date:
     """Return the day to work on: the `--date` value, or today in the configured zone.
 
@@ -363,7 +370,7 @@ def enrich(
     report = enrich_day(day, items, cfg, limit=limit, force=force, on_progress=progress)
     out_dir = enriched_dir(day)
 
-    typer.echo(f"vbj enrich --date {day.isoformat()}")
+    typer.echo(_headline("enrich", day, raw_date is not None))
     typer.echo(
         _field(
             "selection",
@@ -473,7 +480,7 @@ def triage(
     if report.selected == 0:
         _fail(f"no enriched candidate for {day.isoformat()}: run `vbj enrich --date {day}` first.")
 
-    typer.echo(f"vbj triage --date {day.isoformat()}")
+    typer.echo(_headline("triage", day, raw_date is not None))
     typer.echo(
         _field(
             "selection",
@@ -571,7 +578,7 @@ def write(
             _fail(str(exc))
         dump_prompt.parent.mkdir(parents=True, exist_ok=True)
         dump_prompt.write_text(prepared.user_prompt, encoding="utf-8")
-        typer.echo(f"vbj write --date {day.isoformat()} --dump-prompt")
+        typer.echo(_headline("write", day, raw_date is not None) + " --dump-prompt")
         typer.echo(
             _field(
                 "prompt",
@@ -598,7 +605,7 @@ def write(
         _fail(str(exc))
 
     report = outcome.report
-    typer.echo(f"vbj write --date {day.isoformat()}")
+    typer.echo(_headline("write", day, raw_date is not None))
     typer.echo(
         _field(
             "selection",

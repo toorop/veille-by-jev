@@ -75,12 +75,16 @@ reader's own practice — what they would do with it, or why it matters to them.
 
 ### Translating the title
 
-- It is a **title**, not a summary: translate it, do not explain it, do not add what the article
-  concludes, and do not make it longer than the original.
+- It is a **title**, not a summary: translate it, do not explain it, and do not add what the
+  article concludes.
+- Keep the original's information, no more. French runs naturally longer than English, so length
+  is not the test — **added meaning is**. If the translation carries a claim, a figure or a
+  promise the original does not, cut it.
 - Keep it factual. No marketing adjective, no exclamation, no promise the original does not make.
 - Keep product names, project names, model numbers and proper nouns in their original form.
 - A reader who only reads the title must not learn anything false. A title that cannot be
   translated without distorting it is better kept close to the original.
+- Never leave the field out: every item needs a `titre_fr`.
 
 Summarise the article's content; never translate it sentence by sentence. Never invent a fact, a
 figure, a name or a date that is not in the state you were given. If the state does not say
