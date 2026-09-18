@@ -2,11 +2,13 @@
 
 [write]
 # Model identifier in the form the provider expects. OpenRouter uses "provider/model",
-# so changing writer is this one line. Candidates measured on 2026-09-17, at one digest
-# a night (about 17,000 input and 2,500 output tokens):
-#   deepseek/deepseek-v4-flash     USD 0.05 per month
-#   mistralai/mistral-medium-3     USD 0.35 per month
-#   anthropic/claude-sonnet-5      USD 1.77 per month
+# so changing writer is this one line. Per month, at one digest a night and the current quota
+# of fifteen — 32,000 input and 4,100 output tokens, measured on the 2026-09-16 batch. Only the
+# Gemini figure was measured at that size; the others are scaled from their eight-item run:
+#   deepseek/deepseek-v4-flash     USD 0.06 per month
+#   mistralai/mistral-medium-3     USD 0.53 per month
+#   google/gemini-2.5-flash        USD 0.59 per month
+#   anthropic/claude-sonnet-5      USD 6.97 per month
 model = "google/gemini-2.5-flash"
 
 # OpenAI-compatible base URL. OpenRouter by default; another provider or a local
@@ -14,17 +16,20 @@ model = "google/gemini-2.5-flash"
 base_url = "https://openrouter.ai/api/v1"
 
 # Items the digest keeps, best aggregate first, after the admission floor of the grid.
-# The floor guarantees a minimum quality on a quiet night, this caps the volume.
-digest_size = 8
+# The floor decides: an item below it never appears, however few items pass. This cap only
+# bounds the volume on a rich night. So a quiet night gives fewer items than the quota, and
+# that is intended.
+digest_size = 15
 
 # The digest is a report, not a piece of writing: low temperature, little room for
 # invention.
 temperature = 0.3
 # Ceiling on the answer, so a runaway completion cannot cost more than expected. Measured
-# lengths for the same eight items: 3,655, 7,230, then more than 8,000 tokens, which cut the
-# JSON mid-string. The ceiling has to sit above the worst case, not at the average.
+# lengths for eight items: 3,655, 7,230, then more than 8,000 tokens, which cut the JSON
+# mid-string. The ceiling has to sit above the worst case, not at the average, and a quota of
+# fifteen raises the worst case again, so it stays where it is until a run nears it.
 max_tokens = 16000
-# One call carries eight articles, so it is slow compared with a triage call.
+# One call carries every kept article, so it is slow compared with a triage call.
 timeout_s = 180.0
 
 # The system prompt lives in its own file, so the instructions can be tightened — for

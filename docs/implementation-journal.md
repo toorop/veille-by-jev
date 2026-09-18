@@ -464,7 +464,31 @@ in that state, so the extra room invited no invention.
 Gemini via OpenRouter also reports the real `usage.cost`, which the direct Google endpoint does
 not: the digest's cost line stays measured rather than estimated. The Claude digest is kept
 alongside as `digest/2026-09-16--claude.md`, since the two are the comparison this decision rests
-on. The pipeline now costs about **USD 0.83 per month**, of which USD 0.50 is the triage.
+on. At eight items the pipeline cost about **USD 0.83 per month**, of which USD 0.50 is the
+triage.
+
+### The quota, and the same state written twice
+
+The digest kept eight items, and the first eight-item digest was read in full and accepted — with
+one reservation from the reading: eight felt short for a night that had more to say. The floor and
+the quota were doing different jobs without that being stated, so it was made explicit.
+
+**The floor keeps primacy; the quota only bounds the volume.** An item below the floor never
+appears, however few items clear it, so a quiet night now yields a short digest rather than a
+diluted one. The quota was set to 15 and the floor left at 2.0. On 2026-09-16, fourteen items
+cleared the floor, so the quota never came into play: the digest grew from 8 to 14 items and the
+cost from USD 0.0111 to USD 0.0198 a night, about USD 0.59 a month.
+
+Regenerating the digest on the same state produced a defect worth recording, because it is the
+first one a check caught that reading had missed. The state says the router reaches "2,000+ tools
+across **72+** providers". The first run wrote "plus de 72 fournisseurs", correctly. The second
+run, identical state, identical prompt, wrote "plus de **70** fournisseurs". A check of every
+verifiable detail in the fourteen new summaries found 95 of 99 in the state; three of the four
+were artefacts of the checker itself — French renderings of English terms ("texte-vers-image" for
+text-to-image, "agents d'IA" where the article says "agents") — and one was the rounded figure.
+The digit was corrected by hand, and the run stands as the argument for a real verifier rather
+than a periodic manual check: the failure is intermittent, invisible on inspection, and exactly
+what the prompt already forbids.
 
 ## Measurements
 
@@ -485,7 +509,7 @@ stages not yet written.
 | Latency of one triage call | 70 to 500 ms announced | 0.44 s over 200 calls | 2026-09-17 |
 | Input tokens per item | 1,500 | 1,983 over 200 items, against 2,675 on a 5-item sample | 2026-09-17 |
 | Triage cost per month | USD 0.38 | USD 0.50 at 200 items per night | 2026-09-17 |
-| Writing cost per month | not quantified | USD 0.33 at 8 items, USD 0.81 extrapolated at 20 items | 2026-09-17 |
+| Writing cost per month | not quantified | USD 0.59 at 14 items, USD 0.33 at 8 items | 2026-09-17 |
 | Total duration of the nightly run | not estimated | 4 min 15 s, the sum of the four measured stages | 2026-09-17 |
 
 ## Checklist
@@ -495,7 +519,7 @@ stages not yet written.
 - [x] `triage` operational with a single question
 - [x] full grid and coefficients in `config/questions.toml`
 - [x] `write` operational, digest in French
-- [ ] first digest read all the way through by Stéphane
+- [x] first digest read all the way through by Stéphane, and accepted
 - [x] real cost measured and reported in [TypeSafe triage](typesafe-triage.md)
 - [ ] decision: move on to V2 (Reddit, arXiv) or adjust the grid
 
@@ -528,3 +552,6 @@ stages not yet written.
 | 2026-09-17 | The summary length cap is removed | "Two to four sentences" made the writer choose between explaining a term and staying inside the limit, and it dropped the explanation; the cap was a compression constraint masquerading as a style rule |
 | 2026-09-17 | `google/gemini-2.5-flash` writes the digest, superseding Claude Sonnet 5 | It defines jargon on first use where Claude assumed it, for USD 0.0111 a night against USD 0.1328; the Claude digest is kept beside it as the comparison the decision rests on |
 | 2026-09-17 | Each writer comparison is checked against the state it was given | Longer summaries are the first place invention would show, and asserting the prose is grounded is not the same as checking: 63 of 63 verifiable details were found in the state |
+| 2026-09-17 | Quota raised from 8 to 15, the floor left at 2.0 | The floor decides admission and was doing that job unstated; the quota only bounds the volume. A quiet night should give a short digest, not a diluted one, and on 2026-09-16 fourteen items cleared 2.0, so the new quota did not even come into play |
+| 2026-09-17 | The committed user prompt stays the eight-item state | It is the baseline the four writers were compared on; regenerating it at fourteen items would break the comparison it exists to support |
+| 2026-09-17 | A grounding verifier has to be built rather than eyeballed | Regenerating the same state produced "70 fournisseurs" where the source says "72+", in a run whose other 98 verifiable details were sound. The defect is intermittent and invisible on reading, so only a check catches it |

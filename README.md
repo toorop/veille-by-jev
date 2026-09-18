@@ -3,8 +3,8 @@
 **A nightly technology watch, triaged by a decision model and written up as a French digest.**
 
 Every night, `veille-by-jev` pulls the day's Hacker News stories, fetches and extracts the
-articles, scores them against a grid of typed questions, and writes an eight-item Markdown
-digest in French. The point is the filter, not the volume: 200 candidates become 8 things worth
+articles, scores them against a grid of typed questions, and writes a Markdown digest in French.
+The point is the filter, not the volume: 200 candidates become a dozen or so things worth
 reading, each summarised in plain French, with the ones that were set aside still listed and
 scored so the ranking can be contested.
 
@@ -53,7 +53,7 @@ uv run vbj --version
 ```
 
 `.env` is ignored by git and read at startup by the pipeline itself. Only secrets belong there:
-the writer model, its endpoint and the digest size live in `config/`. A variable already
+the writer model, its endpoint and the digest quota live in `config/`. A variable already
 exported in your shell wins over the file, so `TYPESAFE_LOG_LEVEL=DEBUG uv run vbj triage …`
 overrides it for one run.
 
@@ -75,7 +75,7 @@ A full night, as run for 2026-09-16:
 uv run vbj collect --date 2026-09-16   # 1,000 stories, 984 candidates, 1 request, 0.9 s, free
 uv run vbj enrich  --date 2026-09-16   # 200 articles fetched, 166 with usable text, 2 min 31 s
 uv run vbj triage  --date 2026-09-16   # 200 items scored, 14 clear the floor, 88 s, USD 0.0167
-uv run vbj write   --date 2026-09-16   # 8 items written up, 67 s, USD 0.1208
+uv run vbj write   --date 2026-09-16   # 14 items written up, 26 s, USD 0.0198
 ```
 
 Each command prints what it did, and what it cost. The last one:
@@ -83,10 +83,10 @@ Each command prints what it did, and what it cost. The last one:
 ```text
 $ uv run vbj write --date 2026-09-16
 vbj write --date 2026-09-16
-  selection  : 8 written up, 192 set aside, out of 200 triaged (floor 2.0)
-  model      : google/gemini-2.5-flash — 17381 input, 2344 output, 14.73 s
-  cost       : USD 0.0110743
-  written    : digest/2026-09-16.md (43047 bytes)
+  selection  : 14 written up, 186 set aside, out of 200 triaged (floor 2.0)
+  model      : google/gemini-2.5-flash — 31915 input, 4077 output, 25.51 s
+  cost       : USD 0.019767
+  written    : digest/2026-09-16.md (51025 bytes)
 ```
 
 **Replaying is safe and free.** A stage whose output already exists does nothing and spends
@@ -101,7 +101,7 @@ send and stops, without reading a key or calling anything — see
 ```markdown
 # Veille du 16 septembre 2026
 
-**8 items retenus** sur 200 candidats triés. Seuil d'admission : 2,0.
+**14 items retenus** sur 200 candidats triés. Seuil d'admission : 2,0.
 
 ## Accurate Models of AMD Matrix Cores
 
@@ -110,16 +110,17 @@ send and stops, without reading a key or calling anything — see
 - **Catégorie** : recherche
 - **Scores** : interest 2,3 · density 4,0 · primary_source 0,9 · agrégat 2,62
 
-Les multiplicateurs de matrices intégrés aux GPU (les circuits qui accélèrent les
-multiplications de grandes grilles de nombres) ne suivent pas la norme de calcul flottant
-IEEE 754, et leur comportement diffère selon le fabricant et même selon l'architecture d'un
-même fabricant. […] Les auteurs ont construit des modèles logiciels précis au bit pour trois
-architectures AMD (CDNA 1, 2 et 3, utilisées par les GPU MI100, MI210/250 et MI300), validés
-sur dix millions de cas de test, puis s'en sont servis pour mesurer les écarts de précision
-entre les cœurs matriciels d'AMD et les tensor cores de Nvidia.
+Cet article présente des modèles logiciels précis des cœurs matriciels d'AMD, qui sont des
+circuits spécialisés dans les GPU pour la multiplication de matrices. […] Les chercheurs ont
+caractérisé le comportement de ces cœurs sur trois architectures de GPU AMD (CDNA 1, 2 et 3) en
+utilisant des vecteurs de test spécifiques. […] Ces modèles permettent de quantifier les écarts
+de précision au niveau applicatif entre les cœurs matriciels d'AMD et les cœurs tenseurs de
+Nvidia.
 
-**Pourquoi celui-là.** Utile si vous cherchez à comprendre pourquoi un calcul d'IA donne des
-résultats légèrement différents selon le GPU utilisé.
+**Pourquoi celui-là.** Si vous travaillez avec des calculs haute performance sur GPU AMD et que
+la précision numérique est critique, ces modèles peuvent vous aider à comprendre et à anticiper
+les comportements spécifiques de ces architectures, là où la documentation officielle est
+lacunaire.
 ```
 
 The digest is written for a reader who is interested in the field but **not a specialist**: an
@@ -128,10 +129,15 @@ repeated. That requirement lives in `config/write-prompt.md`, not in the code, s
 tightened without touching anything else.
 
 Each kept item carries its source, link, category, the scores behind the decision, a French
-summary running from a few sentences up to about fifteen, and a "why this one" line. The
-eight items are followed by the ones that were set aside, with their score, their category and
-their title as a link to the article, so a rejection can be checked in one click — 192 rows on
+summary running from a few sentences up to about fifteen, and a "why this one" line. The kept
+items are followed by the ones that were set aside, with their score, their category and
+their title as a link to the article, so a rejection can be checked in one click — 186 rows on
 that night — and by the cost of the run.
+
+The admission floor and the quota do different jobs. **The floor decides**: an item below it
+never appears, however few items clear it, so a quiet night gives a short digest. The quota only
+bounds the volume on a rich night. On 2026-09-16, 14 items cleared the floor of 2.0 and the
+quota of 15 never came into play.
 
 ## Cost
 
@@ -142,12 +148,13 @@ Measured on the 2026-09-16 batch, not estimated:
 | `collect` | free | free |
 | `enrich` (718 HTTP requests, 2.5 min) | free | free |
 | `triage` — Jev, 200 items, input only | USD 0.0167 | USD 0.50 |
-| `write` — Claude Sonnet 5 | USD 0.1328 | USD 3.98 |
-| **total** | **USD 0.15** | **USD 4.48** |
+| `write` — Gemini 2.5 Flash | USD 0.0198 | USD 0.59 |
+| **total** | **USD 0.04** | **USD 1.09** |
 
-The writer costs eight times the triage. If that matters more than prose quality, swapping it is
-one line of `config/write.toml`: the three models compared on that same night, and their
-measured cost, are listed there — the cheapest brings the writer down to USD 0.03 per month.
+The writer and the triage now cost about the same. The cost follows the number of items admitted,
+so it varies with the night rather than being fixed by the quota: swapping the writer is one line
+of `config/write.toml`, where the candidate models and their measured cost are listed — the
+cheapest brings the writer down to USD 0.06 per month.
 
 Costs are printed by the stages themselves and measured by the provider, never estimated:
 OpenRouter reports the real cost of the call, and Jev reports the input tokens it billed.
@@ -160,7 +167,7 @@ No code has to change to retune the watch:
 | --- | --- |
 | `config/sources.toml` | enabled sources, the time window and its timezone, the score floor, the enrichment budget |
 | `config/questions.toml` | the grid: typed questions, their descriptive levels, the admission floor, the weights |
-| `config/write.toml` | the writer model, the digest size, its temperature and output ceiling |
+| `config/write.toml` | the writer model, the digest quota, its temperature and output ceiling |
 | `config/write-prompt.md` | the writer's system prompt, including the readability requirement |
 
 **The grid is the file that decides what the digest keeps.** A question is a `score` (an ordered
@@ -231,7 +238,7 @@ veille-by-jev/
   config/
     sources.toml              # sources, window, score floor, enrichment budget
     questions.toml            # the grid: questions, levels, floor, weights
-    write.toml                # writer model, digest size, labels
+    write.toml                # writer model, digest quota, labels
     write-prompt.md           # writer system prompt, including readability
   veille/
     cli.py                    # collect / enrich / triage / write
@@ -251,9 +258,9 @@ veille-by-jev/
 
 ## Status and limits
 
-**V1 is complete**: the four stages run end to end, and a first digest exists
-(`digest/2026-09-16.md`). The acceptance criterion is human and still open: the digest has to be
-read all the way through, and only then are the grid and the writer worth tuning.
+**V1 is complete**: the four stages run end to end, a first digest exists
+(`digest/2026-09-16.md`), and it has been read in full and accepted. What comes after the digest
+is undecided: the pipeline currently stops there.
 
 Honest limits, all measured rather than assumed:
 

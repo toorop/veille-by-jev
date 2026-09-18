@@ -171,7 +171,7 @@ class WriteConfig(BaseModel):
         default="https://openrouter.ai/api/v1",
         description="Chat-completions base URL; any OpenAI-compatible endpoint works.",
     )
-    digest_size: int = Field(default=8, ge=1, description="Items kept in the digest.")
+    digest_size: int = Field(default=15, ge=1, description="Items kept in the digest.")
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
     max_tokens: int = Field(default=16000, ge=1, description="Ceiling on the answer.")
     timeout_s: float = Field(default=180.0, gt=0)

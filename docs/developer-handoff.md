@@ -134,9 +134,8 @@ single batch.
    (done 2026-09-17: five real items on 2026-09-16, 12,016 input tokens, USD 0.000505).
 4. ✅ Add the other questions and the weighted aggregation (done 2026-09-17: four questions,
    weights 0.5 / 0.3 / 0.2, components normalised before weighting).
-5. ✅ `write` (done 2026-09-17: `digest/2026-09-16.md`, eight items, written by
-   `anthropic/claude-sonnet-5`). The first real read of the digest is the remaining
-   acceptance criterion, and it belongs to Stéphane.
+5. ✅ `write` (done 2026-09-17: `digest/2026-09-16.md`, written by `google/gemini-2.5-flash`;
+   the first real read of the digest by Stéphane followed, and the digest was accepted).
 6. Only after that: tuning the grid, adding sources.
 
 ## Known pitfalls
