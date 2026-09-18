@@ -79,10 +79,12 @@ Three reasons:
 
 - Input: the N items kept by triage, with their full text.
 - Output: `digest/<date>.md` — this is **the deliverable**.
-- Expected format: for each kept item, the title, the source, the link, a summary **in French**
-  running from a few sentences up to about fifteen, and a "why this one" line. At the end, the
-  list of dropped items with their score, to keep a trace of what was rejected and make the
-  ranking contestable.
+- Expected format: for each kept item, the title **translated into French** as a link to the
+  article, then the source, the English original title, the link, the category, the scores, a
+  summary **in French** running from a few sentences up to about fifteen, and a "why this one"
+  line. At the end, the list of dropped items with their score, to keep a trace of what was
+  rejected and make the ranking contestable — those stay in English, being raw ranking data
+  rather than prose.
 - Writing happens **directly in French** from English sources, with no translation step.
 - The digest **states the window it covers**, read back from `items.json`, so a rolling digest
   is never mistaken for a complete day — and a 23 or 25 hour civil day says so.

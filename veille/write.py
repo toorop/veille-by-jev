@@ -152,6 +152,7 @@ def parse_reply(content: str) -> tuple[dict[str, dict[str, str]], str | None]:
         if not isinstance(entry, dict) or not entry.get("id"):
             continue
         prose[str(entry["id"])] = {
+            "titre_fr": str(entry.get("titre_fr") or "").strip(),
             "synthese": str(entry.get("synthese") or "").strip(),
             "pourquoi": str(entry.get("pourquoi") or "").strip(),
         }
@@ -240,14 +241,22 @@ def render_digest(
             if isinstance(value, (int, float)) and name != "category"
         )
         category = _label(str(answered.get("category", "")), labels)
+        # The French title is the model's translation of the article's own title. When it is
+        # missing, the English one stands rather than a hole, and the original line goes away.
+        french_title = text.get("titre_fr", "").strip()
 
+        heading = (
+            f"[{_cell(french_title)}](<{score.url}>)" if french_title else _cell(score.title)
+        )
         lines += [
-            f"## {score.title}",
+            f"## {heading}",
             "",
             f"- **Source** : Hacker News — {score.points} points, "
             f"{score.num_comments} commentaires",
-            f"- **Lien** : <{score.url}>",
         ]
+        if french_title:
+            lines.append(f"- **Titre original** : {_cell(score.title)}")
+        lines.append(f"- **Lien** : <{score.url}>")
         if category:
             lines.append(f"- **Catégorie** : {category}")
         if details:

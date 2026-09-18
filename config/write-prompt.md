@@ -64,19 +64,30 @@ article itself could not be read, rather than filling the gap with plausible con
 JSON only: no surrounding text, no markdown fences, no comments.
 
 {"items": [{"id": "<the item id, unchanged>",
+            "titre_fr": "<the article's title, in French>",
             "synthese": "<the French summary, from a few sentences up to about fifteen>",
             "pourquoi": "<one French sentence>"}]}
 
-One entry per received item, in the same order, with `id` copied exactly. `synthese` is what the
-reader sees first and it carries the explanation; `pourquoi` says why this item rather than
-another, in terms of the reader's own practice — what they would do with it, or why it matters
-to them.
+One entry per received item, in the same order, with `id` copied exactly. `titre_fr` is the
+article's own title translated into French; `synthese` is what the reader sees first and it
+carries the explanation; `pourquoi` says why this item rather than another, in terms of the
+reader's own practice — what they would do with it, or why it matters to them.
 
-Summarise, do not translate. Never invent a fact, a figure, a name or a date that is not in the
-state you were given. If the state does not say something, do not write it.
+### Translating the title
+
+- It is a **title**, not a summary: translate it, do not explain it, do not add what the article
+  concludes, and do not make it longer than the original.
+- Keep it factual. No marketing adjective, no exclamation, no promise the original does not make.
+- Keep product names, project names, model numbers and proper nouns in their original form.
+- A reader who only reads the title must not learn anything false. A title that cannot be
+  translated without distorting it is better kept close to the original.
+
+Summarise the article's content; never translate it sentence by sentence. Never invent a fact, a
+figure, a name or a date that is not in the state you were given. If the state does not say
+something, do not write it.
 
 ## Language
 
-All prose you write is in French, both `synthese` and `pourquoi`. Write it as a French technical
-writer would: proper accents, French punctuation, and no English syntax carried over. Keep
-product names, project names and technical proper nouns in their original form.
+All prose you write is in French: `titre_fr`, `synthese` and `pourquoi`. Write it as a French
+technical writer would: proper accents, French punctuation, and no English syntax carried over.
+Keep product names, project names and technical proper nouns in their original form.

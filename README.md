@@ -166,8 +166,9 @@ item says what the thing is before saying why it matters, and jargon is unpacked
 repeated. That requirement lives in `config/write-prompt.md`, not in the code, so it can be
 tightened without touching anything else.
 
-Each kept item carries its source, link, category, the scores behind the decision, a French
-summary running from a few sentences up to about fifteen, and a "why this one" line. The kept
+Each kept item carries **its title translated into French as a link**, then the source, the
+English original title, the link, the category, the scores behind the decision, a French summary
+running from a few sentences up to about fifteen, and a "why this one" line. The kept
 items are followed by the ones that were set aside, with their score, their category and
 their title as a link to the article, so a rejection can be checked in one click — 186 rows on
 that night — and by the cost of the run.

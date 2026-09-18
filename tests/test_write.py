@@ -147,10 +147,21 @@ def test_an_item_without_an_aggregate_is_set_aside() -> None:
 
 
 def test_a_clean_answer_is_read() -> None:
+    prose, error = parse_reply(
+        '{"items": [{"id": "a", "titre_fr": "T", "synthese": "S", "pourquoi": "P"}]}'
+    )
+
+    assert error is None
+    assert prose == {"a": {"titre_fr": "T", "synthese": "S", "pourquoi": "P"}}
+
+
+def test_a_missing_french_title_is_read_as_empty() -> None:
+    """The field is new: a model that omits it must not lose the rest of its answer."""
     prose, error = parse_reply('{"items": [{"id": "a", "synthese": "S", "pourquoi": "P"}]}')
 
     assert error is None
-    assert prose == {"a": {"synthese": "S", "pourquoi": "P"}}
+    assert prose["a"]["titre_fr"] == ""
+    assert prose["a"]["synthese"] == "S"
 
 
 def test_text_around_the_json_is_tolerated() -> None:
@@ -344,6 +355,74 @@ def test_a_collection_without_a_window_leaves_it_unknown(
     prepared = prepare_prompt(DAY, WriteConfig(), QuestionsConfig())
 
     assert prepared.window is None
+
+
+def test_the_french_title_heads_the_item_and_links_to_the_article() -> None:
+    digest = render_digest(
+        DAY,
+        [make_score("1", 2.5)],
+        [],
+        prose={
+            "hn:1": {
+                "titre_fr": "Modèles matériels précis des cœurs matriciels AMD",
+                "synthese": "Résumé.",
+                "pourquoi": "Raison.",
+            }
+        },
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+    )
+
+    expected = "## [Modèles matériels précis des cœurs matriciels AMD](<https://example.com/1>)"
+    assert expected in digest
+    # The English original stays visible, without becoming a second link.
+    assert "- **Titre original** : Title 1" in digest
+    assert digest.count("<https://example.com/1>") == 2  # the heading and the "Lien" line
+
+
+def test_without_a_french_title_the_english_one_stands_alone() -> None:
+    digest = render_digest(
+        DAY,
+        [make_score("1", 2.5)],
+        [],
+        prose={"hn:1": {"synthese": "Résumé.", "pourquoi": "Raison."}},
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+    )
+
+    assert "## Title 1" in digest
+    assert "Titre original" not in digest
+
+
+def test_a_bracket_in_a_translated_title_cannot_break_the_link() -> None:
+    digest = render_digest(
+        DAY,
+        [make_score("1", 2.5)],
+        [],
+        prose={
+            "hn:1": {
+                "titre_fr": "Un routeur pour agents [bêta]",
+                "synthese": "Résumé.",
+                "pourquoi": "Raison.",
+            }
+        },
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+    )
+
+    assert r"## [Un routeur pour agents \[bêta\]](<https://example.com/1>)" in digest
 
 
 def test_a_missing_summary_is_flagged_in_place() -> None:
