@@ -14,6 +14,7 @@ from veille.config import (
     day_window,
     load_questions_config,
     load_sources_config,
+    rolling_window,
 )
 
 
@@ -56,6 +57,48 @@ def test_civil_day_window_follows_daylight_saving(
 def test_unknown_timezone_is_rejected() -> None:
     with pytest.raises(ValueError, match="Unknown timezone"):
         day_window(date(2026, 9, 16), "Mars/Olympus")
+
+
+def test_rolling_window_ends_at_the_run_and_lasts_the_asked_length() -> None:
+    """The whole point of the rolling mode: the batch ends now, not at midnight."""
+    now = datetime(2026, 9, 17, 6, 17, tzinfo=UTC)
+    window = rolling_window(now, "Europe/Paris", 24)
+    assert window.end == now
+    assert window.start == datetime(2026, 9, 16, 6, 17, tzinfo=UTC)
+    assert window.hours == 24
+    assert window.timezone == "Europe/Paris"
+
+
+def test_rolling_window_is_labelled_by_the_day_it_ends_in() -> None:
+    """23:30 UTC is already the next day in Paris: the label follows the zone, not UTC."""
+    window = rolling_window(datetime(2026, 9, 16, 23, 30, tzinfo=UTC), "Europe/Paris", 24)
+    assert window.day == date(2026, 9, 17)
+
+
+def test_rolling_window_accepts_another_length() -> None:
+    now = datetime(2026, 9, 17, 6, 17, tzinfo=UTC)
+    window = rolling_window(now, "Europe/Paris", 6)
+    assert window.hours == 6
+    assert window.start == datetime(2026, 9, 17, 0, 17, tzinfo=UTC)
+
+
+def test_rolling_window_refuses_a_naive_datetime() -> None:
+    with pytest.raises(ValueError, match="aware datetime"):
+        rolling_window(datetime(2026, 9, 17, 6, 17), "Europe/Paris", 24)
+
+
+def test_rolling_window_rejects_an_unknown_timezone() -> None:
+    with pytest.raises(ValueError, match="Unknown timezone"):
+        rolling_window(datetime(2026, 9, 17, 6, 17, tzinfo=UTC), "Mars/Olympus", 24)
+
+
+def test_window_hours_is_bounded_in_the_config() -> None:
+    """A zero or absurd length would collect nothing, or everything ever posted."""
+    assert CollectConfig(window_hours=12).window_hours == 12
+    with pytest.raises(ValidationError):
+        CollectConfig(window_hours=0)
+    with pytest.raises(ValidationError):
+        CollectConfig(window_hours=169)
 
 
 def test_shipped_configuration_is_valid() -> None:

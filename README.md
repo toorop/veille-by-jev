@@ -59,15 +59,15 @@ overrides it for one run.
 
 ## Use
 
-Four commands, one per stage, each taking a civil day. Files are the interface between them, so
-any stage can be replayed alone for a given date.
+Four commands, one per stage. Files are the interface between them, so any stage can be replayed
+alone.
 
 | Command | Reads | Writes | Calls a model |
 | --- | --- | --- | --- |
-| `vbj collect --date D` | `config/sources.toml` | `data/D/items.json` | no |
-| `vbj enrich --date D` | `items.json` | `data/D/enriched/<hash>.json` | no |
-| `vbj triage --date D` | `items.json`, `enriched/`, `config/questions.toml` | `data/D/scores.json` | Jev |
-| `vbj write --date D` | the admitted items of `scores.json` | `digest/D.md` | OpenRouter |
+| `vbj collect [--date D]` | `config/sources.toml` | `data/D/items.json` | no |
+| `vbj enrich [--date D]` | `items.json` | `data/D/enriched/<hash>.json` | no |
+| `vbj triage [--date D]` | `items.json`, `enriched/`, `config/questions.toml` | `data/D/scores.json` | Jev |
+| `vbj write [--date D]` | the admitted items of `scores.json` | `digest/D.md` | OpenRouter |
 
 A full night, as run for 2026-09-16:
 
@@ -77,6 +77,44 @@ uv run vbj enrich  --date 2026-09-16   # 200 articles fetched, 166 with usable t
 uv run vbj triage  --date 2026-09-16   # 200 items scored, 14 clear the floor, 88 s, USD 0.0167
 uv run vbj write   --date 2026-09-16   # 14 items written up, 26 s, USD 0.0198
 ```
+
+### Two ways to cut the window
+
+**`--date D` is the whole civil day D**, in the configured timezone. The same date always yields
+the same batch, whatever time the run happens: that is what makes a night replayable and two
+writers comparable on the same state.
+
+**Without `--date`, the window is the last `window_hours` ending now** (24 h by default), labelled
+by the civil day it ends in. The digest then never lags, which is the point of a watch:
+
+```text
+$ uv run vbj collect
+vbj collect (last 24 h, no --date)
+  timezone   : Europe/Paris — UTC window 2026-09-17T06:22:25Z → 2026-09-18T06:22:25Z
+  hn         : ok — 1000 raw items, 988 kept by the points >= 1 filter, 1 request(s), 0.97 s
+  candidates : 988 after filter → 988 after deduplication, all written
+  written    : data/2026-09-18/items.json (423677 bytes)
+  published  : 2026-09-17T06:30:13Z → 2026-09-18T06:16:44Z
+  cost       : USD 0.00 — no model call at this stage
+```
+
+The newest story in that batch was published five minutes before the run, where a civil day would
+have ended at midnight. The price is that the same label no longer means the same batch, so a
+second `collect` on the same day asks for `--force` rather than pretending the stored file is the
+window you asked for:
+
+```text
+$ uv run vbj collect
+data/2026-09-18/items.json already exists — nothing to do.
+  items      : 988 (collected at 2026-09-18T06:22:26Z)
+  stored     : 2026-09-17T06:22:25Z → 2026-09-18T06:22:25Z (24.0 h)
+  wanted     : 2026-09-17T06:22:29Z → 2026-09-18T06:22:29Z (24 h), which differs from the stored one
+  re-run     : add --force to collect again
+```
+
+A run that crosses midnight between two stages needs an explicit `--date`, since the default
+otherwise means "the run happening now". Every digest states the window it covers, so a rolling
+digest is never mistaken for a complete day.
 
 Each command prints what it did, and what it cost. The last one:
 
@@ -89,9 +127,9 @@ vbj write --date 2026-09-16
   written    : digest/2026-09-16.md (51025 bytes)
 ```
 
-**Replaying is safe and free.** A stage whose output already exists does nothing and spends
-nothing; `--force` makes it run again. `enrich` and `triage` also take `--limit N` to try a
-handful of items, and `write` takes `--model` and `--output` to compare two writers on the same
+**Replaying is safe and free.** A stage whose window was already collected does nothing and
+spends nothing; `--force` makes it run again. `enrich` and `triage` also take `--limit N` to try
+a handful of items, and `write` takes `--model` and `--output` to compare two writers on the same
 night without overwriting the digest. `write --dump-prompt <path>` writes the exact state it would
 send and stops, without reading a key or calling anything — see
 [Testing a writer outside the pipeline](docs/writer-testing.md).
@@ -165,7 +203,7 @@ No code has to change to retune the watch:
 
 | File | What it holds |
 | --- | --- |
-| `config/sources.toml` | enabled sources, the time window and its timezone, the score floor, the enrichment budget |
+| `config/sources.toml` | enabled sources, the rolling window length and its timezone, the score floor, the enrichment budget |
 | `config/questions.toml` | the grid: typed questions, their descriptive levels, the admission floor, the weights |
 | `config/write.toml` | the writer model, the digest quota, its temperature and output ceiling |
 | `config/write-prompt.md` | the writer's system prompt, including the readability requirement |
@@ -236,7 +274,7 @@ veille-by-jev/
   pyproject.toml
   .env.example                # variable names, never values
   config/
-    sources.toml              # sources, window, score floor, enrichment budget
+    sources.toml              # sources, window length, timezone, score floor
     questions.toml            # the grid: questions, levels, floor, weights
     write.toml                # writer model, digest quota, labels
     write-prompt.md           # writer system prompt, including readability

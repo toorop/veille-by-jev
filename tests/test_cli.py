@@ -43,17 +43,38 @@ def test_invalid_date_is_rejected_with_a_clear_message() -> None:
     assert "Invalid date" in result.output
 
 
-def test_missing_date_is_rejected() -> None:
-    result = runner.invoke(app, ["collect"])
-    assert result.exit_code != 0
+def test_missing_date_defaults_to_today_in_the_configured_zone() -> None:
+    """Omitting --date is now the rolling mode, so it must resolve to a real day."""
+    from datetime import UTC, datetime
+
+    from veille.cli import _resolve_day
+    from veille.config import civil_day
+
+    today = civil_day(datetime.now(UTC), "Europe/Paris")
+    assert _resolve_day(None) == today
+    assert _resolve_day("2026-09-16") == date(2026, 9, 16)
 
 
 def test_an_existing_output_file_skips_collection(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    from veille.config import day_window
+    from veille.store import iso_utc
+
+    wanted = day_window(date(2026, 9, 16), "Europe/Paris")
     target = tmp_path / "items.json"
     target.write_text(
-        json.dumps({"stats": {"candidates": 7}, "generated_at": "2026-09-17T00:00:00Z"}),
+        json.dumps(
+            {
+                "stats": {"candidates": 7},
+                "generated_at": "2026-09-17T00:00:00Z",
+                "window": {
+                    "start": iso_utc(wanted.start),
+                    "end": iso_utc(wanted.end),
+                    "hours": wanted.hours,
+                },
+            }
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr("veille.cli.items_path", lambda day: target)
@@ -64,6 +85,39 @@ def test_an_existing_output_file_skips_collection(
     assert "already exists — nothing to do" in result.stdout
     assert "7" in result.stdout
     assert "USD 0.00" in result.stdout
+    assert "the requested one" in result.stdout
+
+
+def test_a_different_stored_window_is_named(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A file holding another window must never pass for the one that was asked for."""
+    from veille.config import day_window
+    from veille.store import iso_utc
+
+    stale = day_window(date(2026, 9, 10), "Europe/Paris")
+    target = tmp_path / "items.json"
+    target.write_text(
+        json.dumps(
+            {
+                "stats": {"candidates": 7},
+                "generated_at": "2026-09-10T00:00:00Z",
+                "window": {
+                    "start": iso_utc(stale.start),
+                    "end": iso_utc(stale.end),
+                    "hours": stale.hours,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("veille.cli.items_path", lambda day: target)
+
+    result = runner.invoke(app, ["collect", "--date", "2026-09-16"])
+
+    assert result.exit_code == 0
+    assert "differs from the stored one" in result.stdout
+    assert "2026-09-09T22:00:00Z" in result.stdout  # the stored start, not the wanted one
 
 
 def test_display_path_falls_back_to_absolute_outside_the_project(tmp_path: Path) -> None:

@@ -490,6 +490,37 @@ The digit was corrected by hand, and the run stands as the argument for a real v
 than a periodic manual check: the failure is intermittent, invisible on inspection, and exactly
 what the prompt already forbids.
 
+### The window: never lag, without losing replay
+
+The civil day was defensible as long as runs happened at night on a fixed schedule, and it is
+what made the writer comparison possible: same date, same batch. But it forces a choice between
+**incomplete** and **lagging**. Run at 08:00 with today's date and the window holds eight hours.
+Run with yesterday's date and the batch is complete, but its newest story is already eight hours
+old — eighteen by the evening. For a watch, freshness is the product.
+
+Both modes now exist, and they are not exclusive:
+
+- `--date D` is the whole civil day: replayable and comparable. Kept for backfill, for
+  comparisons, and for redoing a night.
+- no `--date` is the last `window_hours` (24 by default) ending now, labelled by the civil day
+  it ends in. First measured run: 988 candidates over 24 h, the most recent published **five
+  minutes** before the run, where a civil day would have stopped at midnight.
+
+The price is that the same label no longer means the same batch, so a run can no longer be
+identified by its date. It is identified by the window stored in `items.json` — which the file
+already recorded, so nothing had to be added to the data model. A second `collect` in the same
+day now prints the stored window beside the requested one and asks for `--force`, instead of
+passing one off as the other. And every digest states the window it covers: without that line, a
+digest covering eight hours of 16 September is indistinguishable from one covering the whole
+day, which is the worst kind of silence.
+
+One trap sprung while building this, worth recording because it is caused by the new default:
+`--date` moving from required to optional means **any command run without it touches the
+network**. The old test asserting "a missing date is rejected" therefore stopped being a test and
+became a real collection, writing `data/2026-09-18/items.json` — free, and the data was sound,
+but a test must never decide to hit a live API. It now tests the resolution helper directly, and
+no test invokes a stage without `--date`.
+
 ## Measurements
 
 Sizing hypotheses are replaced by readings as they come. Rows without a measurement belong to
@@ -555,3 +586,7 @@ stages not yet written.
 | 2026-09-17 | Quota raised from 8 to 15, the floor left at 2.0 | The floor decides admission and was doing that job unstated; the quota only bounds the volume. A quiet night should give a short digest, not a diluted one, and on 2026-09-16 fourteen items cleared 2.0, so the new quota did not even come into play |
 | 2026-09-17 | The committed user prompt stays the eight-item state | It is the baseline the four writers were compared on; regenerating it at fourteen items would break the comparison it exists to support |
 | 2026-09-17 | A grounding verifier has to be built rather than eyeballed | Regenerating the same state produced "70 fournisseurs" where the source says "72+", in a run whose other 98 verifiable details were sound. The defect is intermittent and invisible on reading, so only a check catches it |
+| 2026-09-17 | `--date` becomes optional: no date means the last 24 h ending now | The civil day forces a choice between a partial window (today at 08:00) and a lagging one (yesterday, up to 18 h old); a watch lives on freshness. Kept as well because it is what makes a night replayable and two writers comparable |
+| 2026-09-17 | A run is identified by its stored window, not by its date | A rolling window differs on every run, so "the file exists" no longer means "the work is done": the collected window is compared with the requested one, and a mismatch asks for `--force` instead of passing stale data off as fresh |
+| 2026-09-17 | Every digest states the window it covers | A digest holding eight hours of a date looks exactly like one holding the whole day, and a 23 or 25 hour civil day looks like any other. The window is read back from `items.json` and printed in French |
+| 2026-09-17 | No test may invoke a stage without an explicit `--date` | Making the option optional turned the "missing date is rejected" test into a real collection against a live API — free and harmless that once, but a test decides nothing about the network |

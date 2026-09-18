@@ -19,12 +19,16 @@ class Window(BaseModel):
 
     `start` and `end` are UTC and always form a half-open interval `[start, end)`:
     a story published exactly at `end` belongs to the next day. This is what makes
-    a given date yield the same batch, whenever the run happens.
+    a given date yield the same batch, whenever the run happens — true of a civil-day
+    window, while a rolling one is new on every run and is therefore identified by
+    `start` and `end` rather than by `day`.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    day: date = Field(description="Civil day covered, in the `timezone` zone.")
+    day: date = Field(
+        description="Label of the run: the civil day covered, or the one a rolling window ends in."
+    )
     timezone: str = Field(description="Zone used to cut the civil day.")
     start: datetime = Field(description="Window start, in UTC.")
     end: datetime = Field(description="Window end, excluded, in UTC.")

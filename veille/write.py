@@ -22,12 +22,13 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from veille.clients.openrouter import API_KEY_ENV as WRITE_LLM_API_KEY_ENV
 from veille.clients.openrouter import ChatReply, OpenRouterChat
 from veille.config import QuestionsConfig, WriteConfig
-from veille.models import EnrichedItem, ItemScore, WriteOutcome, WriteReport
-from veille.store import digest_path, enriched_path, iso_utc, read_json, scores_path
+from veille.models import EnrichedItem, ItemScore, Window, WriteOutcome, WriteReport
+from veille.store import digest_path, enriched_path, iso_utc, items_path, read_json, scores_path
 
 MONTHS_FR = (
     "janvier",
@@ -177,6 +178,15 @@ def _label(value: str, labels: Mapping[str, str]) -> str:
     return labels.get(value, value)
 
 
+def _french_moment(moment: datetime, tz_name: str) -> str:
+    """Format an instant as a French local date and time, in the window's own zone."""
+    local = moment.astimezone(ZoneInfo(tz_name))
+    return (
+        f"{local.day} {MONTHS_FR[local.month - 1]} {local.year} "
+        f"{local.hour:02d} h {local.minute:02d}"
+    )
+
+
 def render_digest(
     day: date,
     kept: list[ItemScore],
@@ -186,6 +196,7 @@ def render_digest(
     labels: Mapping[str, str],
     floor: float,
     considered: int,
+    window: Window | None = None,
 ) -> str:
     """Assemble the digest: the model's prose inside a structure built from the data.
 
@@ -198,6 +209,7 @@ def render_digest(
         labels: French labels for the category values.
         floor: Admission floor that was applied.
         considered: Number of items triaged that night.
+        window: Time window the batch covered, when it could be read back.
 
     Returns:
         The digest, as Markdown.
@@ -209,6 +221,15 @@ def render_digest(
         f"Seuil d'admission : {_french_number(floor, 1)}.",
         "",
     ]
+    if window is not None:
+        # Always printed, even for a whole civil day: a digest that does not say what it
+        # covers cannot be told apart from one covering eight hours of the same date.
+        lines += [
+            f"Fenêtre couverte : du {_french_moment(window.start, window.timezone)} "
+            f"au {_french_moment(window.end, window.timezone)} "
+            f"({window.timezone}, {_french_number(window.hours, 0)} h).",
+            "",
+        ]
 
     for score in kept:
         text = prose.get(score.item_id, {})
@@ -288,6 +309,7 @@ class PreparedPrompt:
         dropped: Items set aside, best first.
         floor: Admission floor that was applied.
         considered: Number of items triaged that night.
+        window: Window the batch covered, when `items.json` could be read back.
     """
 
     user_prompt: str
@@ -295,6 +317,7 @@ class PreparedPrompt:
     dropped: list[ItemScore]
     floor: float
     considered: int
+    window: Window | None = None
 
 
 def prepare_prompt(day: date, cfg: WriteConfig, grid: QuestionsConfig) -> PreparedPrompt:
@@ -329,12 +352,29 @@ def prepare_prompt(day: date, cfg: WriteConfig, grid: QuestionsConfig) -> Prepar
             EnrichedItem.model_validate(read_json(path)) if path.exists() else None
         )
 
+    # The window is read back from `items.json`, the file that owns it. Without it the digest
+    # still stands, it just cannot say what it covers.
+    window: Window | None = None
+    collection = items_path(day)
+    if collection.exists():
+        payload = read_json(collection)
+        raw_window = payload.get("window") or {}
+        timezone = raw_window.get("timezone") or payload.get("timezone")
+        if timezone and {"start", "end"} <= raw_window.keys():
+            window = Window(
+                day=day,
+                timezone=timezone,
+                start=raw_window["start"],
+                end=raw_window["end"],
+            )
+
     return PreparedPrompt(
         user_prompt=build_state(day, kept, enriched_by_url),
         kept=kept,
         dropped=dropped,
         floor=floor,
         considered=len(scores),
+        window=window,
     )
 
 
@@ -408,6 +448,7 @@ def write_day(
         labels=cfg.labels,
         floor=floor,
         considered=considered,
+        window=prepared.window,
     )
     if error is not None:
         # The raw answer is kept next to the day's data: a truncated reply is the one case

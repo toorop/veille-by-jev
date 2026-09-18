@@ -20,24 +20,32 @@ Three reasons:
 
 ## The five stages
 
-### 1. Collection — `vbj collect --date YYYY-MM-DD`
+### 1. Collection — `vbj collect [--date YYYY-MM-DD]`
 
 - Input: source configuration.
 - Output: `data/<date>/items.json` — the window covered, one report per source, run
   statistics, and one record per item: stable identifier, source, URL, title, source score,
   comment count, publication timestamp.
 - No model call. A deliberately dumb stage.
-- For Hacker News, the Algolia endpoint ranked by relevance is queried over a **civil-day
-  window**: `https://hn.algolia.com/api/v1/search`, filtered by
+- For Hacker News, the Algolia endpoint ranked by relevance is queried over the requested
+  window: `https://hn.algolia.com/api/v1/search`, filtered by
   `created_at_i >= start, created_at_i < end`, one request at `hitsPerPage=1000`, then ranked
-  locally by points. Querying only `front_page` would make the batch depend on the hour of
-  the run, and a rolling 24-hour window would not be reproducible; both were rejected.
+  locally by points. Querying only `front_page` would make the batch depend on the hour of the
+  run, and was rejected.
+- **Two windows, for two needs.** `--date` gives a civil day in the configured timezone: the
+  same date always yields the same batch, which is what makes a night replayable and two
+  writers comparable on the same state. Without `--date`, the window is the last
+  `window_hours` ending now, labelled by the civil day it ends in: the digest never lags, at
+  the price that the same label no longer means the same batch. Because of that, a run is
+  identified by the window stored in `items.json`, not by its date — a second `collect` on the
+  same day reports the stored window and asks for `--force` rather than passing stale data off
+  as the requested one.
 - Items are **not capped** here: the request is free, so the stage keeps every candidate
   above the score floor. The cap belongs to the stages that are billed.
-- Source failure: logged in the output file, the stage carries on. Replaying an existing
-  date changes nothing and spends nothing.
+- Source failure: logged in the output file, the stage carries on. Replaying a window already
+  collected changes nothing and spends nothing.
 
-### 2. Enrichment — `vbj enrich --date YYYY-MM-DD`
+### 2. Enrichment — `vbj enrich [--date YYYY-MM-DD]`
 
 - Input: `items.json`.
 - Output: `data/<date>/enriched/<hash>.json` — body text extracted then truncated, plus the
@@ -54,7 +62,7 @@ Three reasons:
 - An item whose article is unreachable (paywall, error) stays in the batch with a "text
   unavailable" status: triage can then judge on the title and metadata alone.
 
-### 3. Triage — `vbj triage --date YYYY-MM-DD`
+### 3. Triage — `vbj triage [--date YYYY-MM-DD]`
 
 - Input: `items.json` + `enriched/` + `config/questions.toml`.
 - Output: `data/<date>/scores.json` — for each item, the typed answer to each question, with
@@ -67,7 +75,7 @@ Three reasons:
   to the questions that produced it.
 - Full detail in [TypeSafe triage](typesafe-triage.md).
 
-### 4. Writing — `vbj write --date YYYY-MM-DD`
+### 4. Writing — `vbj write [--date YYYY-MM-DD]`
 
 - Input: the N items kept by triage, with their full text.
 - Output: `digest/<date>.md` — this is **the deliverable**.
@@ -76,6 +84,8 @@ Three reasons:
   list of dropped items with their score, to keep a trace of what was rejected and make the
   ranking contestable.
 - Writing happens **directly in French** from English sources, with no translation step.
+- The digest **states the window it covers**, read back from `items.json`, so a rolling digest
+  is never mistaken for a complete day — and a 23 or 25 hour civil day says so.
 - **Written for a non-specialist.** Each item says what the thing is before saying why it
   matters, and unpacked jargon rather than repeated jargon. The digest is meant to be
   listened to later, so a sentence that must be read twice is a defect.

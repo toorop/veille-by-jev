@@ -23,10 +23,12 @@ from typesafe_sdk import TypeSafeError
 from veille import __version__
 from veille.clients.openrouter import ChatError
 from veille.config import (
+    civil_day,
     day_window,
     load_questions_config,
     load_sources_config,
     load_write_config,
+    rolling_window,
 )
 from veille.enrich import enrich_day
 from veille.env import load_dotenv
@@ -88,6 +90,25 @@ def _parse_day(raw: str) -> date:
         _fail(f"Invalid date: {raw!r}. Expected format: YYYY-MM-DD (for example 2026-09-16).")
 
 
+def _resolve_day(raw: str | None) -> date:
+    """Return the day to work on: the `--date` value, or today in the configured zone.
+
+    Omitting `--date` on a downstream stage means "the run happening now", which is the
+    day `collect` would label a fresh rolling window with. A run that crosses midnight
+    between two stages needs an explicit `--date`, and says so rather than silently
+    working on the wrong day.
+    """
+    if raw:
+        return _parse_day(raw)
+    try:
+        settings = load_sources_config()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    except ValidationError as exc:  # pragma: no cover - depends on the file being edited
+        _fail(f"invalid config/sources.toml:\n{exc}")
+    return civil_day(datetime.now(UTC), settings.collect.timezone)
+
+
 def _version_callback(value: bool) -> None:
     """Print the version and exit, as an eager `--version` option."""
     if value:
@@ -112,7 +133,13 @@ def main(
 
 @app.command()
 def collect(
-    raw_date: Annotated[str, typer.Option("--date", help="Civil day to collect, as YYYY-MM-DD.")],
+    raw_date: Annotated[
+        str | None,
+        typer.Option(
+            "--date",
+            help="Civil day to collect, as YYYY-MM-DD. Omit for the last window_hours.",
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option("--force", help="Collect again even if data/<date>/items.json exists."),
@@ -122,14 +149,19 @@ def collect(
 
     No model call at all: this stage is deliberately dumb and verifiable. A source
     failure is recorded in the output file and does not bring the command down.
-    Running it again on a date already collected does nothing unless `--force` is
+    Running it again on a window already collected does nothing unless `--force` is
     passed.
+
+    With `--date`, the window is that whole civil day: the same date always yields the
+    same batch, which is what makes a run replayable and comparable. Without `--date`,
+    the window is the last `window_hours` ending now, so the digest never lags — and
+    because such a window differs on every run, what was already collected is identified
+    by its stored window, not by its date.
 
     Output is deliberately uncapped: every candidate above the score floor is
     written, because collection costs a single request. The cap that bounds the
     priced stages is applied by the stage that pays for it.
     """
-    day = _parse_day(raw_date)
     try:
         settings = load_sources_config()
     except FileNotFoundError as exc:
@@ -137,17 +169,47 @@ def collect(
     except ValidationError as exc:  # pragma: no cover - depends on the file being edited
         _fail(f"invalid config/sources.toml:\n{exc}")
 
-    window = day_window(day, settings.collect.timezone)
+    timezone = settings.collect.timezone
+    if raw_date:
+        day = _parse_day(raw_date)
+        window = day_window(day, timezone)
+        headline = f"vbj collect --date {day.isoformat()}"
+    else:
+        window = rolling_window(datetime.now(UTC), timezone, settings.collect.window_hours)
+        day = window.day
+        headline = f"vbj collect (last {window.hours:g} h, no --date)"
     out_path = items_path(day)
 
-    # Idempotence invariant: without --force, never redo work already done.
+    # Idempotence invariant: without --force, never redo work already done. A rolling
+    # window is new on every run, so what is checked is the stored window, not the file.
     if out_path.exists() and not force:
         existing = read_json(out_path)
+        stored = existing.get("window") or {}
+        wanted_start, wanted_end = iso_utc(window.start), iso_utc(window.end)
+        already = stored.get("start") == wanted_start and stored.get("end") == wanted_end
         stats = existing.get("stats", {})
-        already_selected = stats.get("candidates", "?")
         collected_at = existing.get("generated_at", "?")
         typer.echo(f"{_display_path(out_path)} already exists — nothing to do.")
-        typer.echo(_field("items", f"{already_selected} (collected at {collected_at})"))
+        typer.echo(
+            _field("items", f"{stats.get('candidates', '?')} (collected at {collected_at})")
+        )
+        if already:
+            typer.echo(_field("window", f"{wanted_start} → {wanted_end} — the requested one"))
+        else:
+            typer.echo(
+                _field(
+                    "stored",
+                    f"{stored.get('start', '?')} → {stored.get('end', '?')} "
+                    f"({stored.get('hours', '?')} h)",
+                )
+            )
+            typer.echo(
+                _field(
+                    "wanted",
+                    f"{wanted_start} → {wanted_end} ({window.hours:g} h), "
+                    "which differs from the stored one",
+                )
+            )
         typer.echo(_field("path", str(out_path)))
         typer.echo(_field("re-run", "add --force to collect again"))
         typer.echo(_field("cost", "USD 0.00 (no model call)"))
@@ -184,7 +246,7 @@ def collect(
 
     # --- Report: the per-source lines come before any decision, so that an empty
     # run reads either as "source down" or as "quiet day" ---
-    typer.echo(f"vbj collect --date {day.isoformat()}")
+    typer.echo(headline)
     utc_range = f"{iso_utc(window.start)} → {iso_utc(window.end)}"
     typer.echo(_field("timezone", f"{window.timezone} — UTC window {utc_range}"))
     for outcome in outcomes:
@@ -254,7 +316,10 @@ def collect(
 
 @app.command()
 def enrich(
-    raw_date: Annotated[str, typer.Option("--date", help="Civil day to enrich, as YYYY-MM-DD.")],
+    raw_date: Annotated[
+        str | None,
+        typer.Option("--date", help="Civil day to enrich, as YYYY-MM-DD. Omit for today."),
+    ] = None,
     limit: Annotated[
         int | None,
         typer.Option("--limit", min=1, help="Enrich at most N candidates (development aid)."),
@@ -275,7 +340,7 @@ def enrich(
     An article that cannot be read becomes an `unavailable` record instead of
     a failure: the item stays in the batch and the stage carries on.
     """
-    day = _parse_day(raw_date)
+    day = _resolve_day(raw_date)
     try:
         settings = load_sources_config()
     except FileNotFoundError as exc:
@@ -328,7 +393,10 @@ def enrich(
 
 @app.command()
 def triage(
-    raw_date: Annotated[str, typer.Option("--date", help="Civil day to score, as YYYY-MM-DD.")],
+    raw_date: Annotated[
+        str | None,
+        typer.Option("--date", help="Civil day to score, as YYYY-MM-DD. Omit for today."),
+    ] = None,
     limit: Annotated[
         int | None,
         typer.Option("--limit", min=1, help="Score at most N candidates (development aid)."),
@@ -349,7 +417,7 @@ def triage(
     to the questions that produced it. Replaying a scored day costs nothing unless
     `--force` is passed.
     """
-    day = _parse_day(raw_date)
+    day = _resolve_day(raw_date)
     try:
         questions_cfg = load_questions_config()
     except FileNotFoundError as exc:
@@ -445,7 +513,10 @@ def triage(
 
 @app.command()
 def write(
-    raw_date: Annotated[str, typer.Option("--date", help="Civil day to write up, as YYYY-MM-DD.")],
+    raw_date: Annotated[
+        str | None,
+        typer.Option("--date", help="Civil day to write up, as YYYY-MM-DD. Omit for today."),
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option("--model", help="Override the configured writer, to compare models."),
@@ -479,7 +550,7 @@ def write(
     `--model` and `--output` exist to compare two writers on the same night without
     overwriting the digest.
     """
-    day = _parse_day(raw_date)
+    day = _resolve_day(raw_date)
     try:
         cfg = load_write_config()
     except FileNotFoundError as exc:

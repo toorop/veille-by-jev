@@ -33,6 +33,12 @@ class CollectConfig(BaseModel):
 
     timezone: str = Field(default="Europe/Paris", description="Zone of the civil days.")
     min_points: int = Field(default=1, ge=0, description="Minimum source score to be kept.")
+    window_hours: float = Field(
+        default=24.0,
+        gt=0,
+        le=168,
+        description="Length of the rolling window used when --date is not given.",
+    )
 
 
 class SourceSettings(BaseModel):
@@ -254,6 +260,65 @@ def day_window(day: date, tz_name: str) -> Window:
     start = datetime.combine(day, time.min, tzinfo=tz).astimezone(UTC)
     end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz).astimezone(UTC)
     return Window(day=day, timezone=tz_name, start=start, end=end)
+
+
+def civil_day(now: datetime, tz_name: str) -> date:
+    """Return the civil day `now` falls in, in `tz_name`.
+
+    Args:
+        now: Instant to place on the calendar, timezone-aware.
+        tz_name: IANA zone name of the calendar.
+
+    Returns:
+        The matching civil day.
+
+    Raises:
+        ValueError: If `tz_name` is not a known zone, or `now` is naive.
+
+    """
+    try:
+        tz = ZoneInfo(tz_name)
+    except KeyError as exc:  # pragma: no cover - depends on the system zone database
+        raise ValueError(f"Unknown timezone: {tz_name!r}") from exc
+    if now.tzinfo is None:
+        raise ValueError("civil_day needs an aware datetime")
+    return now.astimezone(tz).date()
+
+
+def rolling_window(now: datetime, tz_name: str, hours: float = 24.0) -> Window:
+    """Return the `[now - hours, now)` window, labelled by the civil day it ends in.
+
+    The counterpart of `day_window`, for a watch that must never lag: the batch always
+    covers the last `hours` and always ends at the moment of the run. The price is that
+    the same label no longer means the same batch, so a rolling run is identified by its
+    stored window rather than by its date — see the idempotence rule in `collect`.
+
+    Args:
+        now: Instant the window ends at, timezone-aware.
+        tz_name: IANA zone name used to label the run.
+        hours: Length of the window, in hours.
+
+    Returns:
+        The matching half-open UTC window.
+
+    Raises:
+        ValueError: If `tz_name` is not a known zone, or `now` is naive.
+
+    """
+    try:
+        tz = ZoneInfo(tz_name)
+    except KeyError as exc:  # pragma: no cover - depends on the system zone database
+        raise ValueError(f"Unknown timezone: {tz_name!r}") from exc
+    if now.tzinfo is None:
+        raise ValueError("rolling_window needs an aware datetime")
+
+    end = now.astimezone(UTC)
+    return Window(
+        day=end.astimezone(tz).date(),
+        timezone=tz_name,
+        start=end - timedelta(hours=hours),
+        end=end,
+    )
 
 
 def load_write_config(path: Path | None = None) -> WriteConfig:

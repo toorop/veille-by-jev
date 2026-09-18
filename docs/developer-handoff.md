@@ -60,10 +60,10 @@ veille-by-jev/                # repository root (= working directory)
 
 | Command | Input | Output | Constraint |
 | --- | --- | --- | --- |
-| `vbj collect --date D` | `config/sources.toml` | `data/D/items.json` | no model call |
-| `vbj enrich --date D` | `items.json` | `data/D/enriched/<hash>.json` | cache by URL fingerprint |
-| `vbj triage --date D` | `items.json` + `enriched/` + `config/questions.toml` | `data/D/scores.json` | calls TypeSafe |
-| `vbj write --date D` | the first N of `scores.json` | `digest/D.md` | calls a generative LLM |
+| `vbj collect [--date D]` | `config/sources.toml` | `data/D/items.json` | no model call |
+| `vbj enrich [--date D]` | `items.json` | `data/D/enriched/<hash>.json` | cache by URL fingerprint |
+| `vbj triage [--date D]` | `items.json` + `enriched/` + `config/questions.toml` | `data/D/scores.json` | calls TypeSafe |
+| `vbj write [--date D]` | the first N of `scores.json` | `digest/D.md` | calls a generative LLM |
 
 Stage details and invariants: [Pipeline workflow](pipeline-workflow.md). State, questions and
 costs: [TypeSafe triage](typesafe-triage.md).
@@ -84,7 +84,7 @@ costs: [TypeSafe triage](typesafe-triage.md).
 
 ## Configuration files
 
-`config/sources.toml` — enabled sources, time window, score floor. **No item cap here**:
+`config/sources.toml` — enabled sources, rolling window length, timezone, score floor. **No item cap here**:
 collection costs a single request and keeps every candidate, so the cap lives where it is
 billed, that is in `enrich`, then in `triage`.
 
@@ -141,11 +141,17 @@ single batch.
 ## Known pitfalls
 
 - **Hacker News.** The `front_page` endpoint alone makes collection depend on the hour of the
-  run. Implemented instead: a civil-day window (configurable timezone) queried through
-  `created_at_i`, then a local ranking by points. Endpoints verified on 2026-09-17:
+  run. Implemented instead: a window queried through `created_at_i`, then a local ranking by
+  points. `--date` cuts it as a civil day in the configured timezone, which is replayable;
+  without `--date` it is the last `window_hours` ending now, which never lags. The window is
+  stored in `items.json` and is what identifies a run. Endpoints verified on 2026-09-17:
   `hn.algolia.com/api/v1/search` and `hacker-news.firebaseio.com/v0/topstories.json`. Algolia
   caps pagination at 1,000 hits per query, so the oldest stories of a busy day are out of
   reach — harmless when only the best scores are kept.
+- **`--date` is optional, so it does not mean "no network".** Any stage run without it resolves
+  the day to *now* in the configured timezone, and `collect` then queries the API for real. In
+  tests, always pass `--date` or stub the output path: a test that invokes `collect` bare will
+  hit a live endpoint and write into `data/`.
 - **Reddit** (V2 only). The RSS feed `reddit.com/r/<sub>/top/.rss?t=day` works without
   authentication but provides **neither score nor comment count**; the `.json` endpoint is
   blocked. Do not build a ranking on a missing signal.

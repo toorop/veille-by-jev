@@ -225,6 +225,127 @@ def test_the_digest_is_built_from_the_data_not_from_the_model() -> None:
     assert "0,001000 USD, mesuré par le fournisseur" in digest
 
 
+def test_the_digest_states_the_window_it_covers() -> None:
+    """A digest that does not say what it covers cannot be told from a partial one."""
+    from veille.config import rolling_window
+
+    window = rolling_window(datetime(2026, 9, 17, 6, 17, tzinfo=UTC), "Europe/Paris", 24)
+    digest = render_digest(
+        DAY,
+        [make_score("1", 2.5)],
+        [],
+        prose={"hn:1": {"synthese": "Résumé.", "pourquoi": "Raison."}},
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+        window=window,
+    )
+
+    assert (
+        "Fenêtre couverte : du 16 septembre 2026 08 h 17 au 17 septembre 2026 08 h 17 "
+        "(Europe/Paris, 24 h)." in digest
+    )
+
+
+def test_a_whole_day_names_its_own_length() -> None:
+    """The line is printed even for a civil day, where it can be 23 or 25 hours long."""
+    from veille.config import day_window
+
+    digest = render_digest(
+        date(2026, 10, 25),
+        [make_score("1", 2.5)],
+        [],
+        prose={"hn:1": {"synthese": "Résumé.", "pourquoi": "Raison."}},
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+        window=day_window(date(2026, 10, 25), "Europe/Paris"),
+    )
+
+    assert "(Europe/Paris, 25 h)" in digest
+
+
+def test_without_a_known_window_the_digest_still_stands() -> None:
+    digest = render_digest(
+        DAY,
+        [make_score("1", 2.5)],
+        [],
+        prose={"hn:1": {"synthese": "Résumé.", "pourquoi": "Raison."}},
+        reply=ChatReply(
+            content="", model="m", input_tokens=1, output_tokens=1, cost_usd=None, duration_s=0.1
+        ),
+        labels={},
+        floor=2.0,
+        considered=1,
+    )
+
+    assert digest.startswith("# Veille du 16 septembre 2026")
+    assert "Fenêtre couverte" not in digest
+
+
+def test_the_prepared_prompt_reads_the_window_from_the_collection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The window belongs to `items.json`; the writer reads it rather than guessing."""
+    from veille.config import day_window
+    from veille.store import iso_utc
+
+    window = day_window(DAY, "Europe/Paris")
+    collection = tmp_path / "items.json"
+    collection.write_text(
+        json.dumps(
+            {
+                "date": DAY.isoformat(),
+                "timezone": "Europe/Paris",
+                "window": {
+                    "start": iso_utc(window.start),
+                    "end": iso_utc(window.end),
+                    "hours": window.hours,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    scores = tmp_path / "scores.json"
+    scores.write_text(
+        json.dumps({"scores": [make_score("1", 2.5).model_dump(mode="json")]}), encoding="utf-8"
+    )
+    monkeypatch.setattr("veille.write.items_path", lambda day: collection)
+    monkeypatch.setattr("veille.write.scores_path", lambda day: scores)
+    monkeypatch.setattr("veille.write.enriched_path", lambda day, url: tmp_path / "absent.json")
+
+    prepared = prepare_prompt(DAY, WriteConfig(), QuestionsConfig())
+
+    assert prepared.window is not None
+    assert prepared.window.start == window.start
+    assert prepared.window.end == window.end
+    assert prepared.window.timezone == "Europe/Paris"
+
+
+def test_a_collection_without_a_window_leaves_it_unknown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scores = tmp_path / "scores.json"
+    scores.write_text(
+        json.dumps({"scores": [make_score("1", 2.5).model_dump(mode="json")]}), encoding="utf-8"
+    )
+    collection = tmp_path / "items.json"
+    collection.write_text(json.dumps({"date": DAY.isoformat()}), encoding="utf-8")
+    monkeypatch.setattr("veille.write.items_path", lambda day: collection)
+    monkeypatch.setattr("veille.write.scores_path", lambda day: scores)
+    monkeypatch.setattr("veille.write.enriched_path", lambda day, url: tmp_path / "absent.json")
+
+    prepared = prepare_prompt(DAY, WriteConfig(), QuestionsConfig())
+
+    assert prepared.window is None
+
+
 def test_a_missing_summary_is_flagged_in_place() -> None:
     digest = render_digest(
         DAY,

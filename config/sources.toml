@@ -2,9 +2,23 @@
 # This file is meant to be edited without touching any code.
 
 [collect]
-# Dates are civil days in this timezone: `--date 2026-09-16` covers 16 September
-# from 00:00 to 24:00 local time, converted to UTC for the API.
+# Two ways to cut the collection window, and they answer different needs.
+#
+# With `--date 2026-09-16`, the window is that whole civil day in this timezone: 16
+# September from 00:00 to 24:00 local time, converted to UTC for the API. The same date
+# always yields the same batch, whatever time the run happens — that is what makes a run
+# replayable and two writers comparable on the same state.
+#
+# Without `--date`, the window is the last `window_hours` ending at the moment of the
+# run, labelled by the civil day it ends in. The digest then never lags, which is the
+# point of a watch; the price is that the same label no longer means the same batch, so
+# what was already collected is identified by its stored window rather than by its date.
+# Running `collect` twice in a day with no `--date` therefore asks for `--force`.
 timezone = "Europe/Paris"
+
+# Length of that rolling window, in hours. 24 is "the last day". One value for the whole
+# pipeline: the window is decided by `collect` and read back by `write`.
+window_hours = 24
 
 # Items are NOT capped here. Collection is free (a single HTTP request) and keeps
 # every candidate above min_points, so that the scoring grid can be re-tuned later
@@ -17,13 +31,13 @@ min_points = 1
 [sources.hn]
 enabled = true
 label = "Hacker News"
-# Algolia endpoint ranked by relevance (best scores first), filtered on a 24 hour
+# Algolia endpoint ranked by relevance (best scores first), filtered on the requested
 # window through created_at_i. Verified on 2026-09-17.
 endpoint = "https://hn.algolia.com/api/v1/search"
 # Kind of entries requested from the API: "story" excludes job offers.
 tags = "story"
 # 1000 is the maximum the API accepts: a single request covers the whole day
-# (observed: 1139 stories published on 2026-09-16).
+# (observed: 1139 stories published on 2026-09-16, 988 over a rolling 24 h).
 hits_per_page = 1000
 # Maximum number of pages to walk when the window exceeds hits_per_page.
 max_pages = 2
